@@ -21,7 +21,7 @@ Pod::Spec.new do |s|
   s.ios.vendored_frameworks = 'Rollout/Rollout.framework'
   s.xcconfig = { 'FRAMEWORK_SEARCH_PATHS' => '$(inherited)' }
 
-  s.source       = { :git => "https://github.com/rollout/rollout.io-ios.git" :tag => "0.4.0" }
+  s.source       = { :git => "https://github.com/rollout/rollout.io-ios.git", :tag => "0.4.0" }
   s.preserve_paths = "lib/**/*", "install/**/*", "Rollout/RolloutDynamic.m"
 
 end
