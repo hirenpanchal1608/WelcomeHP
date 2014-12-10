@@ -18,7 +18,7 @@ Pod::Spec.new do |s|
                       "Sergey Ilyevsky" => "sergey@rollout.io"
 		   }
 
-  s.requires_arc = false
+  s.requires_arc = true
 
   s.ios.vendored_frameworks = 'Rollout/Rollout.framework'
   s.xcconfig = { 'FRAMEWORK_SEARCH_PATHS' => '$(inherited)' }
