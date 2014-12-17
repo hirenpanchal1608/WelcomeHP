@@ -50,8 +50,8 @@ function extract_objc_function(){
    cat "$cache_file" >> "$append_to"
    if [[ "$basename_f" == "RolloutDynamic.m" ]] ; then
       local rollout_install_sanity="$CACHE_DIR/sanity.$TARGETNAME.${NATIVE_ARCH}.log"
-      echo "FRAMEWORK_SEARCH_PATHS=$FRAMEWORK_SEARCH_PATHS" > $rollout_install_sanity
-      cat "$cache_file" >> $rollout_install_sanity
+      echo "FRAMEWORK_SEARCH_PATHS=$FRAMEWORK_SEARCH_PATHS" > "$rollout_install_sanity"
+      cat "$cache_file" >> "$rollout_install_sanity"
    fi
   else
     echo "[]" >> "$append_to"
@@ -59,7 +59,7 @@ function extract_objc_function(){
 }
 
 get_info_plist_value() {
-  /usr/libexec/PlistBuddy -c "Print $1" $INFOPLIST_FILE
+  /usr/libexec/PlistBuddy -c "Print $1" "$INFOPLIST_FILE"
 }
 
 unset app_key help exit disable_upload clean
@@ -129,7 +129,7 @@ data_md5=$(cat "$TMP_FILE" | md5)
 preprocessor_debug=`( eval $GCC_PREPROCESSOR_DEFINITIONS; echo $DEBUG )`
 bundle_short_version=`get_info_plist_value CFBundleShortVersionString`
 bundle_version=`get_info_plist_value CFBundleVersion`
-rollout_build=`(. $LIB_DIR/versions; echo $build)`
+rollout_build=`(. "$LIB_DIR"/versions; echo $build)`
 
 "${LIB_DIR}/create_dynamic_swizzler.rb" "$TMP_FILE" > "${ROLLOUT_DIR}/Rollout/RolloutSwizzlerDynamic.include"
 if [ $MODE == "debug" ] ; then  
@@ -139,7 +139,7 @@ else
 fi
 
 create_json_file() {
-  local json_file=$1
+  local json_file="$1"
   local include_data=$2
 
   echo -ne '{' > "$json_file"
@@ -173,7 +173,7 @@ if [ -z "$do_not_archive_json" -o -z "$disable_upload" ]; then
     mkdir -p "$STRUCTURES_PENDING_UPLOAD_DIR"
     gzipped_json_for_uploading="$STRUCTURES_PENDING_UPLOAD_DIR"/$named_gzipped_json
 
-    case `(. $LIB_DIR/versions; echo $mode)` in
+    case `(. "$LIB_DIR"/versions; echo $mode)` in
       development)
         export ROLLOUT_structureUploadingServer=localhost:9000
 	;;
@@ -187,7 +187,7 @@ if [ -z "$do_not_archive_json" -o -z "$disable_upload" ]; then
     
     cp "$gzipped_json" "$gzipped_json_for_uploading"
     (
-      $LIB_DIR/upload_structure.rb "$gzipped_json_for_uploading"
+      "$LIB_DIR"/upload_structure.rb "$gzipped_json_for_uploading"
       rm "$gzipped_json_for_uploading"
     ) > /dev/null 2>&1 &
   fi

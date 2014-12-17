@@ -17,7 +17,7 @@ end
 file = ARGV[0]
 fatal($error_no_file_argument_given) if file.nil?
 
-json_string = `gunzip -c #{file}`
+json_string = `gunzip -c \"#{file}\"`
 fatal($error_could_not_unzip_file) if $?.to_i != 0
 
 begin
@@ -36,6 +36,6 @@ curl_args = vars.map() { |var|
 server_env = ENV["ROLLOUT_structureUploadingServer"]
 server = server_env ? server_env : "upload.rollout.io"
 
-curl_cmd = "curl -F structure=@#{file} 'http://" + server + "/build/structures?" + curl_args + "'"
+curl_cmd = "curl -F structure=@\"#{file}\" 'http://" + server + "/build/structures?" + curl_args + "'"
 
 system curl_cmd
