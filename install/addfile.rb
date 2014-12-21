@@ -3,20 +3,10 @@ require_relative './bundle/bundler/setup'
 
 require 'xcodeproj'
 
-def findFolder(project, folder, parent)
- if parent != nil && parent != project
-   found =  parent.children.find { |o| o.isa == "PBXGroup" && (o.path == folder || o.name == folder) }
-   return found 
-  end 
- project.objects.find { |o| o.isa == "PBXGroup" && (o.path == folder || o.name == folder) }
-end
-
-def findOrCreateFolder(project, folder, parent)
-  if parent==nil
-    parent = project
-  end
-  found = findFolder(project, folder, parent) 
-  found == nil ? parent.new_group(folder) : found
+def find_or_create_rollout(project)
+  folder = "Rollout"
+  found = project.objects.find { |o| o.isa == "PBXGroup" && (o.path == folder || o.name == folder) }
+  found.nil? ? project.new_group(folder) : found
 end
 
 def find_file_in_directory(parent, full_path)
@@ -24,17 +14,7 @@ def find_file_in_directory(parent, full_path)
 end
 
 def add_file (project, full_path)
-  *folders, filename = full_path.split(/\/+/)
-
-  parent=nil
-  first=true
-  folders.each { |f| 
-    parent = findOrCreateFolder(project, f, parent)
-    if first
-      parent.path = "Rollout-ios-SDK"
-      first=false
-    end
-  }
+  parent = find_or_create_rollout(project)
   existing_file = find_file_in_directory(parent, full_path)
   if existing_file
     puts "File already exists in project, doing nothing"
@@ -62,7 +42,7 @@ def add_file (project, full_path)
         t.build_configurations.each do |c|
           framework_search_path = c.build_settings["FRAMEWORK_SEARCH_PATHS"] || []
           framework_search_path << "$(inherited)"
-          framework_search_path << "Rollout-ios-SDK/#{folders.join("/")}"
+          framework_search_path << "#{File.dirname(full_path)}"
           c.build_settings.merge!('FRAMEWORK_SEARCH_PATHS' => framework_search_path)
         end
       end

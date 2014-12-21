@@ -3,7 +3,11 @@ MODE="production"
 LIB_DIR=$(dirname "$0")
 ROLLOUT_DIR=$(dirname "$LIB_DIR")
 CACHE_DIR="${ROLLOUT_DIR}/.cache"
-STRUCTURES_DIR="${ROLLOUT_DIR}/.structures"
+if [[ "$ROLLOUT_DIR" =~ /Pods/Rollout\.io$ ]]; then
+  STRUCTURES_DIR="${ROLLOUT_DIR}/../../Rollout-ios-SDK/.structures"
+else
+  STRUCTURES_DIR="${ROLLOUT_DIR}/.structures"
+fi
 STRUCTURES_PENDING_UPLOAD_DIR="${STRUCTURES_DIR}/pending_upload"
 STRUCTURES_ARCHIVE_DIR="${STRUCTURES_DIR}/archive"
 LOG_FILE="/tmp/tweaker_$$.log"
