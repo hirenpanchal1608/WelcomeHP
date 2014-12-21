@@ -35,5 +35,5 @@ project.targets.each do |target|
     build_phases.delete(existing_build_phase) unless existing_build_phase.nil?
   end
 end
-rollout_group.remove_from_project
+rollout_group.remove_from_project unless rollout_group.nil?
 project.save()
