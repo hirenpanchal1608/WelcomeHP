@@ -37,6 +37,7 @@ typedef enum {
     RolloutTypePointer,
     RolloutTypeRecordPointer,
     RolloutTypeDefaultObjCObjectPointer,
+    RolloutTypeNumber,
     RolloutTypeNSData,
     RolloutTypeNSString,
     RolloutTypesCount
@@ -73,6 +74,7 @@ typedef enum {
 -(id)initWithBlockPointer:(id)value;
 -(id)initWithPointer:(void*)value;
 -(id)initWithRecordPointer:(void *)pointer ofSize:(size_t)size shouldBeFreedInDealloc:(BOOL)shouldBeFreedOnDealloc;
+-(id)initWithNumber:(NSNumber*)number;
 -(id)initWithVoid;
 
 @property (nonatomic, readonly) RolloutType type;

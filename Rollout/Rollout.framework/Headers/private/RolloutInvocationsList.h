@@ -7,11 +7,14 @@
 #import "RolloutInvocation.h"
 
 @class RolloutActionProducer;
+@protocol RolloutErrors;
+@class RolloutTypeWrapperFactory;
+@class RolloutTypeWrapperGeneratorFactory;
 
 
 @interface RolloutInvocationsList : NSObject
 
--(id)initWithConfiguration:(NSArray*)configuration actionsProducer:(RolloutActionProducer *)actionProducer;
+- (id)initWithConfiguration:(NSArray *)configuration actionsProducer:(RolloutActionProducer *)actionProducer rolloutErrors:(id <RolloutErrors>)rolloutErrors typeWrapperFactory:(RolloutTypeWrapperFactory *)typeWrapperFactory typeWrapperGeneratorFactory:(RolloutTypeWrapperGeneratorFactory *)typeWrapperGeneratorFactory;
 -(RolloutInvocation *)invocationForArguments:(NSArray *)arguments;
 
 @end

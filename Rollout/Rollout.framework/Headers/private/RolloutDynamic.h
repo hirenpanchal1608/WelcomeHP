@@ -8,7 +8,14 @@
 
 #import <Foundation/Foundation.h>
 
-@interface RolloutDynamic : NSObject
-+ (void) setup;
-+ (void) onApplicationStarts;
+@protocol RolloutInvocationsListFactory;
+@class RolloutErrors;
+
+@protocol RolloutDynamic
+- (instancetype)initWithInvocationsListFactory:(id<RolloutInvocationsListFactory>)invocationsListFactory rolloutErrors:(RolloutErrors *)rolloutErrors;
+- (void) setup;
+- (void) onApplicationStarts;
+@end
+
+@interface RolloutDynamic : NSObject <RolloutDynamic>
 @end

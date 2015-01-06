@@ -35,12 +35,16 @@ def wrapping(scope)
   set_original_return_value = "#{call_store};"
   set_original_return_value_if_nil_invocation = "#{store}(rcv, _cmd#{arg_list});"
   set_original_return_value_if_nil_invocation_with_return = "#{set_original_return_value_if_nil_invocation} return;"
-  decrale_r = "" 
+  declare_wrapper_r = "" 
   return_var = ""
-  return_expression = ""
-  tryCatchDefaultValue = ""
+  return_expression = "return;"
+  sync_declare_r = "" 
+  sync_set_r = "swizzleBlock();"
+  sync_return_r = "return;"
+  async_return_r = "return;"
+  final_return = "swizzleBlock(); return;"
   replaceReturnValue = ""
-  disableValue = ""
+  defaultReturnValue = ""
 
   arguments = ""
   args.each { |arg|
@@ -59,62 +63,106 @@ def wrapping(scope)
     return_var = "__rollout_r"
     set_original_return_value = "inv.originalReturnValue = [[RolloutTypeWrapper alloc] initWith#{r_k}:#{call_store}];"
     set_original_return_value_if_nil_invocation_with_return = "return #{set_original_return_value_if_nil_invocation}"
-    decrale_r= "RolloutTypeWrapper *#{return_var};"
+    declare_wrapper_r= "RolloutTypeWrapper *#{return_var};"
+    sync_declare_r = "#{r} $; " + ("ObjCObjectPointer" == r_k ? "__strong " : "") + "#{r}* $p = &$;"
+    sync_set_r = "*$p = swizzleBlock();"
+    sync_return_r = "return $;"
+    async_return_r = "return inv.defaultReturnValue.#{r_k[0, 1].downcase}#{r_k[1..-1]}Value;"
+    final_return = "return swizzleBlock();"
     return_expression = "return #{return_var}.#{r_k[0, 1].downcase}#{r_k[1..-1]}Value;";
-    tryCatchDefaultValue = "#{return_var} = [inv tryCatchReturnValue];"
+    defaultReturnValue = "#{return_var} = [inv defaultReturnValue];"
     replaceReturnValue = "#{return_var} =   [inv conditionalReturnValue];"
-    disableValue = "#{return_var} =         [inv disableReturnValue];"
   end 
   if r_k == "Record"
     set_original_return_value = "{#{r} record = #{call_store};\n              inv.originalReturnValue = [[RolloutTypeWrapper alloc] initWithRecordPointer:&record ofSize:sizeof(#{r}) shouldBeFreedInDealloc:NO];}"
-    return_expression = "return *((#{r} *)#{return_var}.recordPointer);";
+    return_expression = "return *(#{r} *)#{return_var}.recordPointer;";
+    async_return_r = "return *(#{r} *)inv.defaultReturnValue.recordPointer;"
   end
+
+  swizzle_block_content = "\
+        #{declare_wrapper_r}
+        [inv runBefore];
+    
+        inv.originalArguments = originalArguments;
+        #{tweaked_arguments}
+    
+        switch ([inv type]) {
+            case RolloutInvocationTypeDisable:
+                #{defaultReturnValue}
+                break;
+            case RolloutInvocationTypeTryCatch:
+                @try{
+                  #{set_original_return_value}
+                  #{replaceReturnValue}
+                }
+                @catch(id e){
+                    [inv runAfterExceptionCaught];
+                    #{defaultReturnValue}
+                }
+                break;
+            case RolloutInvocationTypeNormal:
+            default:
+                  #{set_original_return_value};
+                  #{replaceReturnValue}
+                break;
+        }
+        #{return_expression}"
+
   return "
 #ifdef ROLLOUT_SWIZZLE_DEFINITION_AREA
 static #{r} #{imp}#{decl_args_list};
 static #{r} (*#{store})#{decl_args_list};
 #{r} #{imp}#{decl_args_list}{
-    #{decrale_r}
     NSArray *originalArguments = @[#{arguments}];
-    RolloutInvocationsList *invocationsList = [RolloutInvocationsListFactory invocationsListFor#{t}Method:#{ns_f} forClass:#{ns_c}];
+    RolloutInvocationsList *invocationsList = [_invocationsListFactory invocationsListFor#{t}Method:#{ns_f} forClass:#{ns_c}];
     RolloutInvocation *inv = [invocationsList invocationForArguments:originalArguments];
-
+    
     if(!inv) {
        #{set_original_return_value_if_nil_invocation_with_return}
     }
 
-    [inv runBefore];
+    if(inv.forceMainThreadType == RolloutInvocation_ForceMainThreadType_off || [NSThread isMainThread]) {
+#{swizzle_block_content}
+    }
 
-    inv.originalArguments = originalArguments;
-    #{tweaked_arguments}
+    #{r} (^swizzleBlock)() = ^#{r}() {
+#{swizzle_block_content}
+    };
 
-    switch ([inv type]) {
-        case RolloutInvocationTypeDisable:
-            #{disableValue}
-            break;
-        case RolloutInvocationTypeTryCatch:
-            @try{
-              #{set_original_return_value}
-              #{replaceReturnValue}
+    switch(inv.forceMainThreadType) {
+        case RolloutInvocation_ForceMainThreadType_sync: {
+            #{sync_declare_r}
+            id exception = nil, __strong *exceptionPointer = &exception;
+
+            dispatch_sync(dispatch_get_main_queue(), ^{
+	        @try {
+                    #{sync_set_r}
+                } @catch(id exception) {
+                    *exceptionPointer = exception;
+                }
+            });
+            if(exception) {
+                @throw exception;
             }
-            @catch(id e){
-                [inv runAfterExceptionCaught];
-                #{tryCatchDefaultValue}
-            }
-            break;
-        case RolloutInvocationTypeNormal:
-        default:
-              #{set_original_return_value};
-              #{replaceReturnValue}
+            #{sync_return_r}
+        }
+        case RolloutInvocation_ForceMainThreadType_async: {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                swizzleBlock();
+            });
+            #{async_return_r}
+        }
+        case RolloutInvocation_ForceMainThreadType_off:
+        case RolloutInvocation_ForceMainThreadTypesCount:
             break;
     }
-    #{return_expression}
+    #{final_return}
 }
 #endif
 #ifdef ROLLOUT_SWIZZLE_ACT_AREA
-if ([RolloutInvocationsListFactory shouldSetup#{t}Swizzle:#{ns_f} forClass:#{ns_c}]){
+if ([_invocationsListFactory shouldSetup#{t}Swizzle:#{ns_f} forClass:#{ns_c}]){
   rollout_swizzle#{t}MethodAndStore(NSClassFromString(#{ns_c}), @selector(#{f}),(IMP)#{imp}, (IMP*)&#{store});
-  [RolloutInvocationsListFactory mark#{t}Swizzle:#{ns_f} forClass:#{ns_c}];
+  [_invocationsListFactory mark#{t}Swizzle:#{ns_f} forClass:#{ns_c}];
 }
 #endif
 "

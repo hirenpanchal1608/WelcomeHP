@@ -11,19 +11,24 @@
 
 @class RolloutActionProducer;
 @class RolloutConfiguration;
+@class RolloutErrors;
+@class RolloutTypeWrapperFactory;
+@class RolloutTypeWrapperGeneratorFactory;
 
-@interface RolloutInvocationsListFactory : NSObject
+@protocol RolloutInvocationsListFactory
+- (RolloutInvocationsList *)invocationsListForInstanceMethod:(NSString *)method forClass:(NSString*) clazz;
+- (RolloutInvocationsList *)invocationsListForClassMethod:(NSString *)method forClass:(NSString*) clazz;
+- (RolloutInvocationsList *)invocationsListFromConfiguration:(NSArray*)configuration;
 
-+ (void)setupWithConfiguration:(RolloutConfiguration *)configuration withProducer: (RolloutActionProducer*) producer;
+- (void) markInstanceSwizzle:(NSString*) method forClass:(NSString*) clazz;
+- (void) markClassSwizzle:(NSString*) method forClass:(NSString*) clazz;
 
-+ (RolloutInvocationsList *)invocationsListForInstanceMethod:(NSString *)method forClass:(NSString*) clazz;
-+ (RolloutInvocationsList *)invocationsListForClassMethod:(NSString *)method forClass:(NSString*) clazz;
-+ (RolloutInvocationsList *)invocationsListFromConfiguration:(NSArray*)configuration;
+- (BOOL) shouldSetupInstanceSwizzle:(NSString*) method forClass:(NSString*) clazz;
+- (BOOL) shouldSetupClassSwizzle:(NSString*) method forClass:(NSString*) clazz;
+@end
 
-+ (void) markInstanceSwizzle:(NSString*) method forClass:(NSString*) clazz;
-+ (void) markClassSwizzle:(NSString*) method forClass:(NSString*) clazz;
+@interface RolloutInvocationsListFactory : NSObject <RolloutInvocationsListFactory>
 
-+ (BOOL) shouldSetupInstanceSwizzle:(NSString*) method forClass:(NSString*) clazz;
-+ (BOOL) shouldSetupClassSwizzle:(NSString*) method forClass:(NSString*) clazz;
+- (instancetype)initWithConfiguration:(RolloutConfiguration *)conf withProducer:(RolloutActionProducer *)producer rolloutErrors:(RolloutErrors *)rolloutErrors typeWrapperFactory:(RolloutTypeWrapperFactory *)typeWrapperFactory typeWrapperGeneratorFactory:(RolloutTypeWrapperGeneratorFactory *)typeWrapperGeneratorFactory;
 
 @end

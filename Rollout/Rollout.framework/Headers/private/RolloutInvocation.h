@@ -13,7 +13,11 @@ typedef IMP *IMPPointer;
 
 @class RolloutActions;
 @class RolloutActionProducer;
+@class RolloutErrors;
+@class RolloutTypeWrapperFactory;
+@class RolloutTypeWrapperGeneratorFactory;
 
+@protocol RolloutErrors;
 #define ROLLOUT_TYPE_WITH_SIZE(s) __rollout_type_ ## s
 #define CREATE_ROLLOUT_TYPE_WITH_SIZE(s) typedef struct { unsigned char buff[s];} ROLLOUT_TYPE_WITH_SIZE(s);
 
@@ -24,16 +28,24 @@ typedef enum{
     RolloutInvocationTypesCount
 } RolloutInvocationType;
 
+typedef enum {
+    RolloutInvocation_ForceMainThreadType_off,
+    RolloutInvocation_ForceMainThreadType_sync,
+    RolloutInvocation_ForceMainThreadType_async,
+    RolloutInvocation_ForceMainThreadTypesCount
+} RolloutInvocation_ForceMainThreadType;
+
 extern  BOOL rollout_swizzleInstanceMethodAndStore(Class class, SEL original, IMP replacement, IMPPointer store) ;
 extern  BOOL rollout_swizzleClassMethodAndStore(Class class, SEL original, IMP replacement, IMPPointer store) ;
 
 @interface RolloutInvocation : NSObject
 
-- (id)initWithConfiguration:(NSDictionary *)configuration actionProducer:(RolloutActionProducer *)actionProducer;
+- (id)initWithConfiguration:(NSDictionary *)configuration actionProducer:(RolloutActionProducer *)actionProducer rolloutErrors:(id<RolloutErrors>)rolloutErrors typeWrapperFactory:(RolloutTypeWrapperFactory *)typeWrapperFactory typeWrapperGeneratorFactory:(RolloutTypeWrapperGeneratorFactory *)typeWrapperGeneratorFactory;
 
 @property (nonatomic, readonly) NSDictionary *configuration;
 @property (nonatomic, readonly) RolloutActions *actions;
 @property (nonatomic, readonly) RolloutInvocationType type;
+@property (nonatomic, readonly) RolloutInvocation_ForceMainThreadType forceMainThreadType;
 
 -(BOOL)satisfiesDynamicData:(RolloutInvocationDynamicData*)dynamicData;
 
@@ -46,8 +58,7 @@ extern  BOOL rollout_swizzleClassMethodAndStore(Class class, SEL original, IMP r
 
 -(NSArray*)tweakedArguments;
 -(RolloutTypeWrapper*)conditionalReturnValue;
--(RolloutTypeWrapper *)disableReturnValue;
--(RolloutTypeWrapper *)tryCatchReturnValue;
+-(RolloutTypeWrapper *)defaultReturnValue;
 
 @end
 
