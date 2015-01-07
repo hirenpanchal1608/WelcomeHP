@@ -63,7 +63,7 @@ function extract_objc_function(){
 }
 
 get_info_plist_value() {
-  /usr/libexec/PlistBuddy -c "Print $1" "$INFOPLIST_FILE"
+  eval echo $(/usr/libexec/PlistBuddy -c "Print $1" "$INFOPLIST_FILE" | sed -e 's/\$(/\\$\\(/g' -e 's/)/\\)/g')
 }
 
 unset app_key help exit disable_upload clean

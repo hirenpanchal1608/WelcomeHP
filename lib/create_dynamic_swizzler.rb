@@ -64,7 +64,7 @@ def wrapping(scope)
     set_original_return_value = "inv.originalReturnValue = [[RolloutTypeWrapper alloc] initWith#{r_k}:#{call_store}];"
     set_original_return_value_if_nil_invocation_with_return = "return #{set_original_return_value_if_nil_invocation}"
     declare_wrapper_r= "RolloutTypeWrapper *#{return_var};"
-    sync_declare_r = "#{r} $; " + ("ObjCObjectPointer" == r_k ? "__strong " : "") + "#{r}* $p = &$;"
+    sync_declare_r = "#{r} $; " + ("ObjCObjectPointer" == r_k || "BlockPointer" == r_k ? "__strong " : "") + "#{r}* $p = &$;"
     sync_set_r = "*$p = swizzleBlock();"
     sync_return_r = "return $;"
     async_return_r = "return inv.defaultReturnValue.#{r_k[0, 1].downcase}#{r_k[1..-1]}Value;"
