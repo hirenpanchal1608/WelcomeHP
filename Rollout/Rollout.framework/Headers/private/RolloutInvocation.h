@@ -9,8 +9,6 @@
 #import <Foundation/Foundation.h>
 #import "RolloutTypeWrapper.h"
 
-typedef IMP *IMPPointer;
-
 @class RolloutActions;
 @class RolloutActionProducer;
 @class RolloutErrors;
@@ -34,9 +32,6 @@ typedef enum {
     RolloutInvocation_ForceMainThreadType_async,
     RolloutInvocation_ForceMainThreadTypesCount
 } RolloutInvocation_ForceMainThreadType;
-
-extern  BOOL rollout_swizzleInstanceMethodAndStore(Class class, SEL original, IMP replacement, IMPPointer store) ;
-extern  BOOL rollout_swizzleClassMethodAndStore(Class class, SEL original, IMP replacement, IMPPointer store) ;
 
 @interface RolloutInvocation : NSObject
 

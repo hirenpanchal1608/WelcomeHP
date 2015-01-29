@@ -55,6 +55,8 @@ _RE(RolloutNetwork_jsonParsing)
 _RE(RolloutNetwork_emptyResult)
 _RE(RolloutNetwork_exceptionInsideAsyncNetworkRequest)
 
+_RE(RolloutMethodSwizzler_swizzlingFailed)
+
 @protocol RolloutDeviceProperties;
 
 #ifdef DEBUG

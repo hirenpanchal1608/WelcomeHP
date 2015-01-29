@@ -66,7 +66,7 @@ typedef enum {
 -(id)initWithChar_U:(char)value;
 -(id)initWithWChar:(wchar_t)value;
 -(id)initWithUChar:(unsigned char)value;
--(id)initWithSChar:(char)value;
+-(id)initWithSChar:(signed char)value;
 -(id)initWithChar_S:(char)value;
 -(id)initWithEnum:(__rollout_enum)value;
 -(id)initWithObjCObjectPointer:(id)value type:(RolloutType)type;
@@ -98,7 +98,7 @@ typedef enum {
 @property (nonatomic, readonly) char char_UValue;
 @property (nonatomic, readonly) wchar_t wCharValue;
 @property (nonatomic, readonly) unsigned char uCharValue;
-@property (nonatomic, readonly) char sCharValue;
+@property (nonatomic, readonly) signed char sCharValue;
 @property (nonatomic, readonly) char char_SValue;
 @property (nonatomic, readonly) id objCObjectPointerValue;
 @property (nonatomic, readonly) id blockPointerValue;

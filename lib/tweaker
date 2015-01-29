@@ -111,8 +111,17 @@ EOF
 [ -n "$app_key" ] || { echo "app_key argument is required" 1>&2; exit 2; }
 
 echo "Rollout pre compile script"
-is_first=true
+
+current_sdk_version=`(. "$LIB_DIR"/versions; echo $lib)`
+cache_sdk_version="$CACHE_DIR"/sdk_version
+[ -d "$CACHE_DIR" -a -r "$cache_sdk_version" ] && [ "`cat "$cache_sdk_version"`" == "$current_sdk_version" ] || {
+  echo "Rollout: sdk version changed, cleaning cache..."
+  rm -rf "$CACHE_DIR"
+}
 mkdir -p "$CACHE_DIR"
+echo $current_sdk_version > "$cache_sdk_version"
+
+is_first=true
 echo -ne "[" > "$TMP_FILE"
 cat "$LIB_DIR"/static_json_part >> $TMP_FILE
 date  +"%s : start to read code" >> $LOG_FILE

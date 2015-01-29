@@ -2,6 +2,7 @@
 require "JSON"
 
 def wrapping(scope)
+  producer_signature = scope[:producer_signature]
   f  = scope[:function_name]
   f_ = f.tr(":","_")
   r_k  = scope[:return_object][:kind]
@@ -29,11 +30,10 @@ def wrapping(scope)
 
   t = scope[:type]
   imp = " _rollout_impl_#{c}_#{f_}_#{t}"
-  decl_args_list = "(id rcv, SEL _cmd#{arg_dec})"
   store = "_rollout_storage_#{c}_#{f_}_#{t}"
-  call_store = "#{store}(rcv, _cmd#{arg_names})"
+  call_store = "originalFunction(rcv, NSSelectorFromString(methodId.selector)#{arg_names})"
   set_original_return_value = "#{call_store};"
-  set_original_return_value_if_nil_invocation = "#{store}(rcv, _cmd#{arg_list});"
+  set_original_return_value_if_nil_invocation = "originalFunction(rcv, NSSelectorFromString(methodId.selector)#{arg_list});"
   set_original_return_value_if_nil_invocation_with_return = "#{set_original_return_value_if_nil_invocation} return;"
   declare_wrapper_r = "" 
   return_var = ""
@@ -109,12 +109,14 @@ def wrapping(scope)
         #{return_expression}"
 
   return "
-#ifdef ROLLOUT_SWIZZLE_DEFINITION_AREA
-static #{r} #{imp}#{decl_args_list};
-static #{r} (*#{store})#{decl_args_list};
-#{r} #{imp}#{decl_args_list}{
+- (id)blockFor_#{producer_signature}_withOriginalImplementation:(IMP)originalImplementation methodId:(RolloutMethodId *)methodId
+{
+  return ^#{r}(id rcv#{arg_dec}) {
+    #{r} (*originalFunction)(id rcv, SEL _cmd#{arg_dec}) = (void *) originalImplementation;
+
     NSArray *originalArguments = @[#{arguments}];
-    RolloutInvocationsList *invocationsList = [_invocationsListFactory invocationsListFor#{t}Method:#{ns_f} forClass:#{ns_c}];
+    NSArray *tweakConfiguration = _configuration.configurationsByMethodId[methodId];
+    RolloutInvocationsList *invocationsList = [_invocationsListFactory invocationsListFromTweakConfiguration:tweakConfiguration];
     RolloutInvocation *inv = [invocationsList invocationForArguments:originalArguments];
     
     if(!inv) {
@@ -157,14 +159,8 @@ static #{r} (*#{store})#{decl_args_list};
             break;
     }
     #{final_return}
+  };
 }
-#endif
-#ifdef ROLLOUT_SWIZZLE_ACT_AREA
-if ([_invocationsListFactory shouldSetup#{t}Swizzle:#{ns_f} forClass:#{ns_c}]){
-  rollout_swizzle#{t}MethodAndStore(NSClassFromString(#{ns_c}), @selector(#{f}),(IMP)#{imp}, (IMP*)&#{store});
-  [_invocationsListFactory mark#{t}Swizzle:#{ns_f} forClass:#{ns_c}];
-}
-#endif
 "
 end
 
@@ -176,6 +172,10 @@ def fix_type_issue(data)
  # Special - CXType_BlockPointer  CXType_Record   CXType_Enum  CXType_Pointer  CXType_ObjCObjectPointer  
   keep_types = [ "UShort","Char16","Char_U","Char16","Char32","Int128","UInt128","Bool","Float","Short","Long","WChar","ULong","Double","Int","Void","Char_S","UChar","SChar","LongLong","ULongLong","UInt","LongDouble"]
   case 
+  when "CGFloat" == data["origin"]
+    return { :type =>  data["origin"], :kind => "Float"}
+  when "BOOL" == data["origin"]
+    return { :type =>  data["origin"], :kind => "Bool"}
   when "ObjCObjectPointer" == data["kind"]
     return { :type => "id", :kind => data["kind"]}
   when "Pointer" == data["kind"]
@@ -185,7 +185,6 @@ def fix_type_issue(data)
   when "Enum" == data["kind"]
     return { :type => "__rollout_enum", :kind => data["kind"]}
   when "Record" == data["kind"]
-    #return { :type => "ROLLOUT_TYPE_WITH_SIZE(#{data["size"].to_i})", :kind => data["kind"]}
     return { :type =>  data["type"], :kind => data["kind"]}
   when keep_types.include?( data["kind"])
     return { :type => data["type"], :kind => data["kind"]}
@@ -200,7 +199,6 @@ extract_arguments_with_types = lambda { |a|
   t[:name] = "__rollout_var_#{a["symbol"]}"
   t
 }
-
 
 valid_for_swizzeling  = lambda { |m|
   puts "//#{m["symbol"]} removed" if m["__should_be_removed"]
@@ -226,7 +224,20 @@ def figure_out_import(d)
   return nil
 end
 
-puts "#ifdef ROLLOUT_SWIZZLE_DEFINITION_AREA"
+def object_signature_type(object)
+  kind = object[:kind]
+  type = object[:type]
+  if kind == "Record"
+    return "#{kind}_#{type.split(" ")[1]}"
+  end
+
+  if ["CGFloat", "BOOL"].include? type
+    return type
+  end
+
+  return kind
+end
+
 defines = []
 #types = [] ;
 symbols.each { |f| 
@@ -244,7 +255,6 @@ symbols.each { |f|
           end
         end
       }
-      #types.push(m["return"]["size"]) if m["return"]["kind"] == "Record" 
       m["__should_be_removed"] = true  if ignored_types.include?( m["return"]["kind"]) 
       if m["return"]["kind"] == "Record"
         import = figure_out_import(m["return"])
@@ -260,23 +270,34 @@ symbols.each { |f|
 defines.uniq().each { |i|
   puts "#import #{i}"
 }
-#types.uniq().each { |s| 
-#  puts "CREATE_ROLLOUT_TYPE_WITH_SIZE(#{s.to_i})"
-#}
-puts "#endif"
+puts "@implementation RolloutDynamic(blocks)"
 
+producer_signatures_hash = {}
 symbols.each { |f| 
   f.each {|c|
     c["children"].select(&valid_for_swizzeling).each { |m| 
       method_return_object = fix_type_issue(m["return"])
       arguments_with_types  = m["args"].map(&extract_arguments_with_types)
+
+      method_type = m["kind"] == "instance" ? "instanceMethod" : "classMethod"
+      method_signature_args = [object_signature_type(method_return_object)]
+      arguments_with_types.each{|o| method_signature_args << object_signature_type(o)}
+      method_signature = method_signature_args.join "___"
+      producer_signature = "#{method_type}_#{method_signature}"
+
+      next if producer_signatures_hash.has_key? producer_signature
+      producer_signatures_hash[producer_signature] = 1
+
       puts wrapping({
         :class => c["symbol"],
         :return_object => method_return_object,
         :type =>  m["kind"] == "instance" ? "Instance" : "Class",
         :function_name => m["symbol"],
-        :args => arguments_with_types
+        :args => arguments_with_types,
+	:producer_signature => producer_signature
       })
     }
   }
 }
+
+puts "@end"
