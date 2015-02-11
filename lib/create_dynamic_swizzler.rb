@@ -1,13 +1,12 @@
 #!/usr/bin/env ruby
+require 'net/http'
 require "JSON"
+require "cgi"
 
 def wrapping(scope)
   producer_signature = scope[:producer_signature]
-  f  = scope[:function_name]
-  f_ = f.tr(":","_")
   r_k  = scope[:return_object][:kind]
   r  = scope[:return_object][:type]
-  c  = scope[:class]
   args = scope[:args] || []
   arg_list  = args.inject("") { |memo, o|
     "#{memo}, #{o[:name]}" 
@@ -25,12 +24,8 @@ def wrapping(scope)
   arg_dec  = args.inject("")  { |memo, o|  
     "#{memo}, #{o[:type]} #{o[:name]}"
   }
-  ns_f = "@\"#{f}\""
-  ns_c = "@\"#{c}\""
 
   t = scope[:type]
-  imp = " _rollout_impl_#{c}_#{f_}_#{t}"
-  store = "_rollout_storage_#{c}_#{f_}_#{t}"
   call_store = "originalFunction(rcv, NSSelectorFromString(methodId.selector)#{arg_names})"
   set_original_return_value = "#{call_store};"
   set_original_return_value_if_nil_invocation = "originalFunction(rcv, NSSelectorFromString(methodId.selector)#{arg_list});"
@@ -164,11 +159,24 @@ def wrapping(scope)
 "
 end
 
+def report_error(action, details)
+  errors_url = ARGV[1]
+  report_full_url = "#{errors_url}?action=#{CGI.escape(action)}&label=#{CGI.escape (details.to_s)}"
+  STDERR.puts "Will report error via url:'#{report_full_url}'"
+  result = Net::HTTP.get(URI(report_full_url))
+  STDERR.puts "report result: #{result}"
+end
+
+abort "Aborting: error_url and input_file_path should be supplied as arugments" unless ARGV.length == 2
 symbols  = JSON.parse(IO.read(ARGV[0]))
 
 ignored_types = ["ConstantArray", "IncompleteArray", "FunctionProto", "Invalid", "Unexposed", "NullPtr","Overload","Dependent","ObjCId","ObjCClass","ObjCSel","FirstBuiltin","LastBuiltin","Complex","LValueReference","RValueReference","Typedef","ObjCInterface","FunctionNoProto","Vector","VariableArray","DependentSizedArray","MemberPointer"]
 
 def fix_type_issue(data)
+  ["origin", "type"].each { |key|
+    data[key].gsub!(/\bconst /, "") unless data[key].nil?
+  }
+
  # Special - CXType_BlockPointer  CXType_Record   CXType_Enum  CXType_Pointer  CXType_ObjCObjectPointer  
   keep_types = [ "UShort","Char16","Char_U","Char16","Char32","Int128","UInt128","Bool","Float","Short","Long","WChar","ULong","Double","Int","Void","Char_S","UChar","SChar","LongLong","ULongLong","UInt","LongDouble"]
   case 
@@ -194,9 +202,9 @@ def fix_type_issue(data)
 end
 
 
-extract_arguments_with_types = lambda { |a|
+extract_arguments_with_types = lambda { |a, index|
   t  =  fix_type_issue(a)
-  t[:name] = "__rollout_var_#{a["symbol"]}"
+  t[:name] = "arg#{index}"
   t
 }
 
@@ -228,7 +236,7 @@ def object_signature_type(object)
   kind = object[:kind]
   type = object[:type]
   if kind == "Record"
-    return "#{kind}_#{type.split(" ")[1]}"
+    return "#{kind}_#{type.gsub(" ", "_RolloutSpace_")}"
   end
 
   if ["CGFloat", "BOOL"].include? type
@@ -239,7 +247,6 @@ def object_signature_type(object)
 end
 
 defines = []
-#types = [] ;
 symbols.each { |f| 
   f.each {|c|
     c["children"].select(&valid_for_swizzeling).each { |m| 
@@ -277,25 +284,34 @@ symbols.each { |f|
   f.each {|c|
     c["children"].select(&valid_for_swizzeling).each { |m| 
       method_return_object = fix_type_issue(m["return"])
-      arguments_with_types  = m["args"].map(&extract_arguments_with_types)
+      arguments_with_types  = m["args"].map.with_index(&extract_arguments_with_types)
 
       method_type = m["kind"] == "instance" ? "instanceMethod" : "classMethod"
       method_signature_args = [object_signature_type(method_return_object)]
       arguments_with_types.each{|o| method_signature_args << object_signature_type(o)}
       method_signature = method_signature_args.join "___"
+
       producer_signature = "#{method_type}_#{method_signature}"
-
-      next if producer_signatures_hash.has_key? producer_signature
-      producer_signatures_hash[producer_signature] = 1
-
-      puts wrapping({
-        :class => c["symbol"],
+      signature_data = {
         :return_object => method_return_object,
         :type =>  m["kind"] == "instance" ? "Instance" : "Class",
-        :function_name => m["symbol"],
         :args => arguments_with_types,
 	:producer_signature => producer_signature
-      })
+      }
+      
+      if producer_signatures_hash.has_key? producer_signature
+        if signature_data != producer_signatures_hash[producer_signature]
+          report_error("Different method objects share the same signature", {
+            :signature => producer_signature,
+            :objectA => producer_signatures_hash[producer_signature],
+            :objectB => signature_data
+          })
+        end
+        next
+      end
+
+      producer_signatures_hash[producer_signature] = signature_data
+      puts wrapping(signature_data)
     }
   }
 }

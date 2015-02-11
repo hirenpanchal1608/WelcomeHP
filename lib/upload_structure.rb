@@ -33,7 +33,7 @@ curl_args = vars.map() { |var|
   var + "=" + json[var]
 }.join "&"
 
-server_env = ENV["ROLLOUT_structureUploadingServer"]
+server_env = ENV["ROLLOUT_allServicesInOneServer"]
 server = server_env ? server_env : "upload.rollout.io"
 
 curl_cmd = "curl -F structure=@\"#{file}\" 'http://" + server + "/build/structures?" + curl_args + "'"

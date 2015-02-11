@@ -12,7 +12,7 @@ def get_build_files(target )
   ar = [] 
   target.build_phases.each { |phase| 
     phase.files.select { |build_file| 
-      if build_file.file_ref.isa != "PBXReferenceProxy" && build_file.file_ref.respond_to?("last_known_file_type") && (build_file.file_ref.last_known_file_type == "sourcecode.c.objc" || build_file.file_ref.last_known_file_type == "sourcecode.cpp.objcpp" )
+      if (!build_file.file_ref.nil?) && build_file.file_ref.isa != "PBXReferenceProxy" && build_file.file_ref.respond_to?("last_known_file_type") && (build_file.file_ref.last_known_file_type == "sourcecode.c.objc" || build_file.file_ref.last_known_file_type == "sourcecode.cpp.objcpp" )
         yield(build_file) if block_given?
         ar.push(build_file)
       end
@@ -44,4 +44,3 @@ get_build_files(target) { |o|
   print "#{o.file_ref.real_path}\0" 
   $stdout.flush
 }
-

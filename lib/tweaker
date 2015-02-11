@@ -111,7 +111,18 @@ EOF
 [ -n "$app_key" ] || { echo "app_key argument is required" 1>&2; exit 2; }
 
 echo "Rollout pre compile script"
-
+case `(. "$LIB_DIR"/versions; echo $mode)` in
+  development)
+    export ROLLOUT_allServicesInOneServer=localhost:9000
+    ;;
+  qa)
+    export ROLLOUT_allServicesInOneServer=qa.rollout.io
+    ;;
+  production)
+    unset ROLLOUT_allServicesInOneServer
+    ;;
+esac
+ 
 current_sdk_version=`(. "$LIB_DIR"/versions; echo $lib)`
 cache_sdk_version="$CACHE_DIR"/sdk_version
 [ -d "$CACHE_DIR" -a -r "$cache_sdk_version" ] && [ "`cat "$cache_sdk_version"`" == "$current_sdk_version" ] || {
@@ -125,7 +136,7 @@ is_first=true
 echo -ne "[" > "$TMP_FILE"
 cat "$LIB_DIR"/static_json_part >> $TMP_FILE
 date  +"%s : start to read code" >> $LOG_FILE
-files_count=$("${LIB_DIR}/print_compiled_files.rb" "$PROJECT_FILE_PATH" "$TARGETNAME" | tr '\000' '\n'| wc -l | tr -d " ")
+files_count=$("${LIB_DIR}/print_compiled_files.rb" "$PROJECT_FILE_PATH" "$TARGETNAME" | tr '\000' '\n'| wc -l | tr -d " "; exit ${PIPESTATUS[0]}) || exit 4
 counter=0
 while read -r -d $'\0' f ; do
   echo "Rollout: extracting file $counter of $files_count"
@@ -143,8 +154,8 @@ preprocessor_debug=`( eval $GCC_PREPROCESSOR_DEFINITIONS; echo $DEBUG )`
 bundle_short_version=`get_info_plist_value CFBundleShortVersionString`
 bundle_version=`get_info_plist_value CFBundleVersion`
 rollout_build=`(. "$LIB_DIR"/versions; echo $build)`
+rollout_api_version=`(. "$LIB_DIR"/versions; echo $api)`
 
-"${LIB_DIR}/create_dynamic_swizzler.rb" "$TMP_FILE" > "${ROLLOUT_DIR}/Rollout/RolloutSwizzlerDynamic.include"
 if [ $MODE == "debug" ] ; then  
   echo Log file in $LOG_FILE
 else
@@ -167,6 +178,13 @@ create_json_file() {
 create_json_file "$JSON_WITH_DATA" include_data
 create_json_file "$JSON_WITHOUT_DATA"
 
+error_reporting_host="error.rollout.io"
+if [ ! -z $ROLLOUT_allServicesInOneServer ] ; then
+  error_reporting_host=$ROLLOUT_allServicesInOneServer
+fi
+error_url="http://$error_reporting_host/build/error/$app_key/$bundle_short_version/$rollout_api_version"
+"${LIB_DIR}/create_dynamic_swizzler.rb" "$TMP_FILE" "$error_url" > "${ROLLOUT_DIR}/Rollout/RolloutSwizzlerDynamic.include" || exit 3
+
 rm -f "$TMP_FILE"
 
 # Compress and archive/upload the JSON if needed
@@ -186,18 +204,7 @@ if [ -z "$do_not_archive_json" -o -z "$disable_upload" ]; then
     mkdir -p "$STRUCTURES_PENDING_UPLOAD_DIR"
     gzipped_json_for_uploading="$STRUCTURES_PENDING_UPLOAD_DIR"/$named_gzipped_json
 
-    case `(. "$LIB_DIR"/versions; echo $mode)` in
-      development)
-        export ROLLOUT_structureUploadingServer=localhost:9000
-	;;
-      qa)
-        export ROLLOUT_structureUploadingServer=qa.rollout.io
-	;;
-      production)
-        unset ROLLOUT_structureUploadingServer
-	;;
-    esac
-    
+   
     cp "$gzipped_json" "$gzipped_json_for_uploading"
     (
       "$LIB_DIR"/upload_structure.rb "$gzipped_json_for_uploading"
