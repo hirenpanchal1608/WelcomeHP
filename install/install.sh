@@ -9,9 +9,16 @@ else
   xcode_dir=$(echo "$PROJECT_DIR/"*.xcodeproj)
 fi
 
-"$BIN_DIR"/remove_rollout_from_xcodeproj.rb "$xcode_dir"
-"$BIN_DIR/addFile.rb" "$xcode_dir"  Rollout-ios-SDK/Rollout/{RolloutDynamic.m,Rollout.framework}
-add_file_exit_status=$?
-"$BIN_DIR/create_script.rb" "$xcode_dir" "Rollout Code analyzer" "\"\${SRCROOT}/Rollout-ios-SDK/lib/tweaker\" -k $2"
-create_script_exit_status=$?
-exit $(( $add_file_exit_status + $create_script_exit_status ))
+app_key=$2
+
+"$BIN_DIR"/xcode_ruby_helpers/install.rb << EOF
+{
+  "xcode_dir": "$xcode_dir",
+  "app_key": "$app_key",
+  "files_to_add": [
+    "Rollout-ios-SDK/Rollout/RolloutDynamic.m",
+    "Rollout-ios-SDK/Rollout/Rollout.framework"
+  ],
+  "sdk_subdir": "Rollout-ios-SDK"
+}
+EOF

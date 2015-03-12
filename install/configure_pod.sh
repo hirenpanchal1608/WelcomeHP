@@ -76,14 +76,18 @@ echo "Configuring project \"$xcode_dir\""
 
 rm -rf "$PROJECT_DIR"/Rollout-ios-SDK/{.cache,lib,install,Rollout}
 analytics  rm_exit_status $? 
-"$BIN_DIR"/remove_rollout_from_xcodeproj.rb "$xcode_dir"
 
-add_script="$BIN_DIR/addFile.rb"
+"$BIN_DIR"/xcode_ruby_helpers/install.rb << EOF
+{
+  "xcode_dir": "$xcode_dir",
+  "app_key": "$app_key",
+  "files_to_add": [
+    "Pods/Rollout.io/Rollout/RolloutDynamic.m"
+  ],
+  "sdk_subdir": "Pods/Rollout.io"
+}
+EOF
+exit_status=$?
 
-cd "$BASE_DIR" && "$add_script" "$xcode_dir"  Pods/Rollout.io/Rollout/RolloutDynamic.m
-add_file_exit_status=$?
-"$BIN_DIR/create_script.rb" "$xcode_dir" "Rollout Code analyzer" "\"\${SRCROOT}/Pods/Rollout.io/lib/tweaker\" -k $app_key"
-create_script_exit_status=$?
-exit_status=$(( $add_file_exit_status + $create_script_exit_status ))
-analytics  configure_pod_exit_status $exit_status 
-exit  $exit_status
+analytics configure_pod_exit_status $exit_status 
+exit $exit_status

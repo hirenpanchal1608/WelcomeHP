@@ -16,6 +16,8 @@
 @class RolloutTypeWrapperGeneratorFactory;
 
 @protocol RolloutErrors;
+@class RolloutDeviceProperties;
+@class RolloutConditionValuesFactory;
 #define ROLLOUT_TYPE_WITH_SIZE(s) __rollout_type_ ## s
 #define CREATE_ROLLOUT_TYPE_WITH_SIZE(s) typedef struct { unsigned char buff[s];} ROLLOUT_TYPE_WITH_SIZE(s);
 
@@ -35,7 +37,7 @@ typedef enum {
 
 @interface RolloutInvocation : NSObject
 
-- (id)initWithConfiguration:(NSDictionary *)configuration actionProducer:(RolloutActionProducer *)actionProducer rolloutErrors:(id<RolloutErrors>)rolloutErrors typeWrapperFactory:(RolloutTypeWrapperFactory *)typeWrapperFactory typeWrapperGeneratorFactory:(RolloutTypeWrapperGeneratorFactory *)typeWrapperGeneratorFactory;
+- (id)initWithConfiguration:(NSDictionary *)configuration actionProducer:(RolloutActionProducer *)actionProducer rolloutErrors:(id <RolloutErrors>)rolloutErrors typeWrapperFactory:(RolloutTypeWrapperFactory *)typeWrapperFactory typeWrapperGeneratorFactory:(RolloutTypeWrapperGeneratorFactory *)typeWrapperGeneratorFactory conditionValuesFactory:(RolloutConditionValuesFactory *)conditionValuesFactory;
 
 @property (nonatomic, readonly) NSDictionary *configuration;
 @property (nonatomic, readonly) RolloutActions *actions;

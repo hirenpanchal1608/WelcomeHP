@@ -10,11 +10,12 @@
 @protocol RolloutErrors;
 @class RolloutTypeWrapperFactory;
 @class RolloutTypeWrapperGeneratorFactory;
+@class RolloutDeviceProperties;
 
 
 @interface RolloutInvocationsList : NSObject
 
-- (id)initWithConfiguration:(NSArray *)configuration actionsProducer:(RolloutActionProducer *)actionProducer rolloutErrors:(id <RolloutErrors>)rolloutErrors typeWrapperFactory:(RolloutTypeWrapperFactory *)typeWrapperFactory typeWrapperGeneratorFactory:(RolloutTypeWrapperGeneratorFactory *)typeWrapperGeneratorFactory;
+- (id)initWithConfiguration:(NSArray *)configuration actionsProducer:(RolloutActionProducer *)actionProducer rolloutErrors:(id <RolloutErrors>)rolloutErrors typeWrapperFactory:(RolloutTypeWrapperFactory *)typeWrapperFactory typeWrapperGeneratorFactory:(RolloutTypeWrapperGeneratorFactory *)typeWrapperGeneratorFactory conditionValuesFactory:(RolloutConditionValuesFactory *)conditionValuesFactory;
 -(RolloutInvocation *)invocationForArguments:(NSArray *)arguments;
 
 @end
