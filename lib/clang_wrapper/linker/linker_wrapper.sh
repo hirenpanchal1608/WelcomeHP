@@ -2,9 +2,14 @@
 
 set -e
 
-echo "In Rollout.io linker wrapper"
+echo "In Rollout.io linker wrapper ($0)"
+export ROLLOUT_LINKER_WRAPPER="$0"
 
-clang_path=`/usr/bin/xcrun -f $(basename "$0")`
+if [ -n "$ROLLOUT_REAL_CLANG" ]; then
+  clang_path="$ROLLOUT_REAL_CLANG"
+else
+  clang_path=`/usr/bin/xcrun -f $(basename "$0")`
+fi
 
 linker_cmd_file="`echo $@ | sed -e 's/.* -filelist //' -e 's/ -.*//' -e 's/\.[^.]*$//'`".rollout_linker_cmd
 {

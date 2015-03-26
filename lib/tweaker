@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export ROLLOUT_TWEAKER="$0"
+
 LIB_DIR=$(dirname "$0")
 ROLLOUT_DIR=$(dirname "$LIB_DIR")
 CACHE_DIR="${ROLLOUT_DIR}/.cache"
@@ -18,7 +20,8 @@ ERROR_expectedLargerBinaryAfterRelinking=("message=Expected larger binary after 
 ERROR_expectedLargerBinaryAfterRerunningLipo=("message=Expected larger binary after rerunning lipo" "xcode_alert=warning")
 ERROR_extractSymbolsErrors=("message=ExtractSymbols or json_proxy.rb generated errors")
 ERROR_cmdNotFound=("exit=5" "message=Missing .cmd file, do you have proper CC/LD settings? Missing file" "xcode_alert=error")
-handle_error() {
+ERROR_swiftDetected=("exit=6" "message=This Rollout.io version does not support Swift. Please contact us at support@rollout.io" "xcode_alert=error")
+handle_error() { #{{{
   eval local error=('"${'$1'[@]}"')
   local details="$2"
   local exit=""
@@ -31,7 +34,7 @@ handle_error() {
   [ -z "$xcode_alert" ] || echo "$xcode_alert: $message" 1>&2
   "$LIB_DIR"/errors_reporter.rb "tweaker error" "$message"
   [ -z "$exit" ] || exit $exit
-}
+} #}}}
 
 temp_dir=`mktemp -d /tmp/rollout_tmp.XXX`
 
@@ -39,12 +42,17 @@ get_info_plist_value() {
   eval echo $(/usr/libexec/PlistBuddy -c "Print $1" "$SRCROOT/$INFOPLIST_FILE" | sed -e 's/\$(/\\$\\(/g' -e 's/)/\\)/g')
 }
 
-extract_cmd_data() {
-  cmd_file="$1"
-  cmd_var=$2
-  cmd_args_array=$3
+extract_cmd_data() { #{{{
+  local cmd_file="$1"
+  local cmd_var=$2
+  local cmd_args_array=$3
 
-  [ -f "$cmd_file" ] || handle_error ERROR_cmdNotFound "$cmd_file"
+  [ -f "$cmd_file" ] || {
+    "$LIB_DIR/contains_swift_files.rb" "$PROJECT_FILE_PATH" "$TARGETNAME" &&
+      handle_error ERROR_swiftDetected
+    handle_error ERROR_cmdNotFound "$cmd_file"
+  }
+
 
   local arg_line
 
@@ -55,10 +63,12 @@ extract_cmd_data() {
       eval $cmd_args_array[\${#$cmd_args_array[*]}]="'$arg_line'"
     done
   } < "$cmd_file"
-}
+
+  rm "$cmd_file"
+} #}}}
 
 unset app_key help exit disable_upload clean disable_locale_enforcement
-while getopts "k:hmcl" option; do
+while getopts "k:hmcl" option; do #{{{
   case $option in
     k)
       app_key=$OPTARG
@@ -79,9 +89,9 @@ while getopts "k:hmcl" option; do
       exit=1
       ;;
   esac
-done
+done #}}}
 
-[ -z "$help" ] || {
+[ -z "$help" ] || { #{{{
   cat << EOF
 Usage:
 $0 <options>
@@ -93,7 +103,7 @@ $0 <options>
   -h                     this help message
 EOF
   exit
-}
+} #}}}
 
 [ -z "$exit" ] || exit 1
 
@@ -122,6 +132,7 @@ end_of_error_msg
   exit 4
 }
 
+# Define ROLLOUT_allServicesInOneServer: #{{{
 case `(. "$LIB_DIR"/versions; echo $mode)` in
   development)
     export ROLLOUT_allServicesInOneServer=localhost:9000
@@ -132,7 +143,7 @@ case `(. "$LIB_DIR"/versions; echo $mode)` in
   production)
     unset ROLLOUT_allServicesInOneServer
     ;;
-esac
+esac #}}}
  
 export ROLLOUT_apiVersion=`(. "$LIB_DIR"/versions; echo $api)`
 export ROLLOUT_shortVersion=`get_info_plist_value CFBundleShortVersionString`
@@ -177,39 +188,43 @@ end_of_dynamic_include_part1
   rollout_dynamic_cmd_file="${rollout_dynamic_o_file%o}rollout_compile_cmd"
   cached_dynamic_o="$CACHE_DIR/$TARGET_NAME.$arch.RolloutDynamic.o"
   cached_dynamic_md5="${cached_dynamic_o%o}md5"
-  dynamic_md5=`cat "$dynamic_include" "$rollout_dynamic_cmd_file" | md5` 
+  [ -f "$rollout_dynamic_cmd_file" ] &&
+    dynamic_md5=`cat "$dynamic_include" "$rollout_dynamic_cmd_file" | md5` ||
+      dynamic_md5=""
+  echo "Rollout: Going to override RolloutDynamic.o for architecture $arch ($rollout_dynamic_o_file)"
   if [ "`cat "$cached_dynamic_md5" 2>/dev/null`" == $dynamic_md5 -a -f "$cached_dynamic_o" ]; then
     echo "Rollout: using cached RolloutDynamic"
     cp -fv "$cached_dynamic_o" "$rollout_dynamic_o_file"
   else
-    echo "Rollout: compiling RolloutDynamic ($arch)"
+    echo "Rollout: compiling RolloutDynamic"
     extract_cmd_data "$rollout_dynamic_cmd_file" rollout_dynamic_cc_cmd rollout_dynamic_cc_args
-    "$rollout_dynamic_cc_cmd" "${rollout_dynamic_cc_args[@]}"
-    cp -f "$rollout_dynamic_o_file" "$cached_dynamic_o"
-    echo "$dynamic_md5" > "$cached_dynamic_md5"
+    "$rollout_dynamic_cc_cmd" "${rollout_dynamic_cc_args[@]}" && {
+      cp -f "$rollout_dynamic_o_file" "$cached_dynamic_o"
+      echo "$dynamic_md5" > "$cached_dynamic_md5"
+    }
   fi
 
-  echo "Rollout: relinking ($arch)"
-  size_before=`stat -f\%z "$linker_out_file"`
+  echo "Rollout: relinking ($arch) => $linker_out_file"
+  declare -i size_before=`stat -f\%z "$linker_out_file"`
   "$linker_cmd" "${linker_args[@]}"
-  size_after=`stat -f\%z "$linker_out_file"`
-  [ "$size_before" -lt "$size_after" ] || handle_error ERROR_expectedLargerBinaryAfterRelinking
+  declare -i size_after=`stat -f\%z "$linker_out_file"`
+  [ $size_before -lt $size_after ] || handle_error ERROR_expectedLargerBinaryAfterRelinking
 done
 
-[ $number_of_archs == 1 ] || cat > "$dynamic_include" << end_of_multi_arch_dynamic_include
+if [ $number_of_archs == 1 ]; then
+  touch "$dynamic_include"
+else
+  cat > "$dynamic_include" << end_of_multi_arch_dynamic_include
 // The file was devnulled during multi-arch build to prevent confusion
 end_of_multi_arch_dynamic_include
 
-lipo_cmd_file="$TARGET_BUILD_DIR"/rollout_lipo_cmd
-if [ -f "$lipo_cmd_file" ] ; then
   echo "Rollout: running lipo"
-  extract_cmd_data "$lipo_cmd_file" lipo_cmd lipo_args
+  extract_cmd_data "$TARGET_BUILD_DIR"/rollout_lipo_cmd lipo_cmd lipo_args
   lipo_out_file=`echo ${lipo_args[*]} | sed -e 's/.* -output //' -e 's/ -.*//'`
-  size_before=`stat -f\%z "$lipo_out_file"`
+  declare -i size_before=`stat -f\%z "$lipo_out_file"`
   "$lipo_cmd" "${lipo_args[@]}"
-  size_after=`stat -f\%z "$lipo_out_file"`
-  [ "$size_before" -lt "$size_after" ] || handle_error ERROR_expectedLargerBinaryAfterRerunningLipo
-  rm "$lipo_cmd_file"
+  declare -i size_after=`stat -f\%z "$lipo_out_file"`
+  [ $size_before -lt $size_after ] || handle_error ERROR_expectedLargerBinaryAfterRerunningLipo
 fi
 
 joined_json=$temp_dir/joined_json
@@ -227,7 +242,7 @@ joined_json=$temp_dir/joined_json
 
 data_md5=$(cat "$joined_json" | md5)
 
-create_json_file() {
+create_json_file() { #{{{
   local json_file="$1"
   local include_data=$2
 
@@ -240,13 +255,13 @@ create_json_file() {
     }
     echo -n "\"md5\":\"$data_md5\",\"env_GCC_PREPROCESSOR_DEFINITIONS__DEBUG\":\"$preprocessor_debug\",\"rollout_appKey\":\"$app_key\",\"CFBundleShortVersionString\":\"$ROLLOUT_shortVersion\",\"CFBundleVersion\":\"$bundle_version\",\"rollout_build\":\"$rollout_build\"}"
   } > "$json_file"
-}
+} #}}}
 create_json_file "$JSON_WITH_DATA" include_data
 create_json_file "$JSON_WITHOUT_DATA"
 
 rm -rf "$temp_dir"
 
-# Compress and archive/upload the JSON if needed
+# Compress and archive/upload the JSON if needed #{{{
 unset do_not_archive_json
 [ -r  "${INSTALL_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}" ] || do_not_archive_json=1
 if [ -z "$do_not_archive_json" -o -z "$disable_upload" ]; then
@@ -270,11 +285,11 @@ if [ -z "$do_not_archive_json" -o -z "$disable_upload" ]; then
       rm "$gzipped_json_for_uploading"
     ) > /dev/null 2>&1 &
   fi
-fi
+fi #}}}
 
-# Copy JSON_WITHOUT_DATA:
+# Copy JSON_WITHOUT_DATA: #{{{
 cp -v "$JSON_WITHOUT_DATA"  "${CONFIGURATION_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/"
 if [ -r  "${INSTALL_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}" ]; then
   echo "Rollout: Installation mode, special copy" 
   cp -v "$JSON_WITHOUT_DATA"  "${INSTALL_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
-fi
+fi #}}}

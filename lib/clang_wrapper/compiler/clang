@@ -2,7 +2,8 @@
 
 set -e
 
-echo "In Rollout.io compiler wrapper"
+echo "In Rollout.io compiler wrapper ($0)"
+export ROLLOUT_COMPILER_WRAPPER="$0"
 
 clang_path=`/usr/bin/xcrun -f $(basename "$0")`
 

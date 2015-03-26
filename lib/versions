@@ -1,6 +1,6 @@
 # The file is sourced by bash, so the only expressions allowed are assignments without spaces
-build=49
-lib=0.8.0
+build=56
+lib=0.8.1
 api=1.5.0
 required_installed_build=39
 mode=production
