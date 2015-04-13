@@ -6,7 +6,7 @@ $:.unshift File.dirname(__FILE__) + "/vendor/bundle/ruby/2.0.0/gems/activesuppor
 $:.unshift File.dirname(__FILE__) + "/vendor/bundle/ruby/2.0.0/gems/multi_json-1.9.2/lib"
 $:.unshift File.dirname(__FILE__) + "/vendor/bundle/ruby/2.0.0/gems/i18n-0.6.9/lib"
 $:.unshift File.dirname(__FILE__) + "/vendor/bundle/ruby/2.0.0/gems/rake-10.2.2/lib"
-require 'xcodeproj'
+require_relative 'vendor/bundle/ruby/2.0.0/gems/xcodeproj-0.14.1/lib/xcodeproj'
 
 
 def init_project(dir)

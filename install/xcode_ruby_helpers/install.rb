@@ -12,6 +12,7 @@ xcode_dir = configuration["xcode_dir"]
 app_key = configuration["app_key"]
 files_to_add = configuration["files_to_add"]
 sdk_subdir = configuration["sdk_subdir"]
+tweaker_phase_before_linking = configuration["tweaker_phase_before_linking"]
 
 project = Xcodeproj::Project.new(xcode_dir)
 project.initialize_from_file
@@ -27,8 +28,9 @@ end
 base_dir = "#{File.dirname __FILE__}/../.."
 build=`. '#{base_dir}/lib/versions' ; /bin/echo -n $build`
 
-script_content = "ROLLOUT_lastConfiguredBuildInXcodeproj=#{build} \"\${SRCROOT}/#{sdk_subdir}/lib/tweaker\" -k #{app_key}"
-CreateScript.new(project).create_script("Rollout.io post-build", script_content)
+tweaker_d_flag = tweaker_phase_before_linking ? "-d" : ""
+script_content = "ROLLOUT_lastConfiguredBuildInXcodeproj=#{build} \"\${SRCROOT}/#{sdk_subdir}/lib/tweaker\" #{tweaker_d_flag} -k #{app_key}"
+CreateScript.new(project).create_script("Rollout.io post-build", script_content, tweaker_phase_before_linking)
 
 OverrideClang.new(project).install("\${SRCROOT}/#{sdk_subdir}/lib")
 

@@ -29,11 +29,14 @@ rollout_build=`(. "$BIN_DIR"/../lib/versions; echo $build)`
 
 shopt -s nullglob
 
-unset app_key help exit xcode_dir
-while getopts "p:k:h" option; do
+unset app_key help exit xcode_dir tweaker_before_linking
+while getopts "p:k:lh" option; do
   case $option in
     k)
       app_key=$OPTARG
+      ;;
+    l)
+      tweaker_before_linking=1
       ;;
     h)
       help=1
@@ -55,6 +58,7 @@ $0 <options>
   -k <app key>           Rollout app key (required)
   -p <.xcodeproj dir>    a path to the project directory (optional, for cases
                          in which the script can't locate it automatically)
+  -l                     set tweaker script phase before the linking phase
   -h                     this help message
 EOF
   exit
@@ -84,6 +88,7 @@ analytics  rm_exit_status $?
   "files_to_add": [
     "Pods/Rollout.io/Rollout/RolloutDynamic.m"
   ],
+  `[ -z "$tweaker_before_linking" ] || echo "\"tweaker_phase_before_linking\": 1,"`
   "sdk_subdir": "Pods/Rollout.io"
 }
 EOF

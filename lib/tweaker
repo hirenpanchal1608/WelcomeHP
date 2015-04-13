@@ -18,9 +18,10 @@ dynamic_include="${ROLLOUT_DIR}/Rollout/RolloutSwizzlerDynamic.include"
 
 ERROR_expectedLargerBinaryAfterRelinking=("message=Expected larger binary after relinking" "xcode_alert=warning")
 ERROR_expectedLargerBinaryAfterRerunningLipo=("message=Expected larger binary after rerunning lipo" "xcode_alert=warning")
-ERROR_extractSymbolsErrors=("message=ExtractSymbols or json_proxy.rb generated errors")
+ERROR_extractSymbolsErrors=("message=ExtractSymbols generated errors")
 ERROR_cmdNotFound=("exit=5" "message=Missing .cmd file, do you have proper CC/LD settings? Missing file" "xcode_alert=error")
 ERROR_swiftDetected=("exit=6" "message=This Rollout.io version does not support Swift. Please contact us at support@rollout.io" "xcode_alert=error")
+ERROR_dsymOverrideError=("message=dSYM regenerating failed" "xcode_alert=warning")
 handle_error() { #{{{
   eval local error=('"${'$1'[@]}"')
   local details="$2"
@@ -67,8 +68,22 @@ extract_cmd_data() { #{{{
   rm "$cmd_file"
 } #}}}
 
-unset app_key help exit disable_upload clean disable_locale_enforcement
-while getopts "k:hmcl" option; do #{{{
+get_opt_arg() { #{{{
+  local args_ref=$1
+  local option="$2"
+  
+  eval local args='("${'$args_ref'[@]}")'
+  local i
+
+  for ((i=0; i<${#args[*]}; i++)); do
+    [ "${args[$i]}" == $option ] || continue
+    echo "${args[$(($i + 1))]}"
+    return
+  done
+} #}}}
+
+unset app_key help exit disable_upload clean disable_locale_enforcement do_not_override_dsym
+while getopts "k:hmcld" option; do #{{{
   case $option in
     k)
       app_key=$OPTARG
@@ -85,6 +100,9 @@ while getopts "k:hmcl" option; do #{{{
     l)
       disable_locale_enforcement=1
       ;;
+    d)
+      do_not_override_dsym=1
+      ;;
     *)
       exit=1
       ;;
@@ -100,6 +118,7 @@ $0 <options>
   -m                     disable uploading of structure json to Rollout server
   -c                     clean the cache directory
   -l                     don't force UTF-8 locale
+  -d                     do not override dsym in the end
   -h                     this help message
 EOF
   exit
@@ -168,12 +187,12 @@ for linker_list_file in ${!LINK_FILE_LIST_*}; do
   arch="${linker_list_file#LINK_FILE_LIST_}"
   arch_json=$temp_dir/arch_json.$arch
   extract_cmd_data "${!linker_list_file%.*}.rollout_linker_cmd" linker_cmd linker_args
-  linker_out_file=`echo ${linker_args[*]} | sed -e 's/.* -o //' -e 's/ -.*//'`
+  linker_out_file=`get_opt_arg linker_args -o`
 
   dsym_file=$temp_dir/tmp.dsym
-
   xcrun dsymutil "$linker_out_file" -o "$dsym_file"
-  extract_symbols_errors=$({ "$LIB_DIR/ExtractSymbols" "$dsym_file"/Contents/Resources/DWARF/* | "$LIB_DIR"/json_proxy.rb "$LIB_DIR"/static_json_part > $arch_json; } 2>&1 | while read line; do echo -n "$line\\n"; done)
+  
+  extract_symbols_errors=$({ "$LIB_DIR/ExtractSymbols" "`ls -1 "$dsym_file"/Contents/Resources/DWARF/* | head -1`" "$LIB_DIR"/static_json_part > $arch_json; } 2>&1 | while read line; do echo -n "$line\\n"; done)
   [ -z "$extract_symbols_errors" ] || handle_error ERROR_extractSymbolsErrors "$extract_symbols_errors"
 
   cat > "$dynamic_include" << end_of_dynamic_include_part1
@@ -213,6 +232,7 @@ done
 
 if [ $number_of_archs == 1 ]; then
   touch "$dynamic_include"
+  dsym_source_file="$linker_out_file"
 else
   cat > "$dynamic_include" << end_of_multi_arch_dynamic_include
 // The file was devnulled during multi-arch build to prevent confusion
@@ -220,11 +240,19 @@ end_of_multi_arch_dynamic_include
 
   echo "Rollout: running lipo"
   extract_cmd_data "$TARGET_BUILD_DIR"/rollout_lipo_cmd lipo_cmd lipo_args
-  lipo_out_file=`echo ${lipo_args[*]} | sed -e 's/.* -output //' -e 's/ -.*//'`
+  lipo_out_file=`get_opt_arg lipo_args -output`
   declare -i size_before=`stat -f\%z "$lipo_out_file"`
   "$lipo_cmd" "${lipo_args[@]}"
   declare -i size_after=`stat -f\%z "$lipo_out_file"`
   [ $size_before -lt $size_after ] || handle_error ERROR_expectedLargerBinaryAfterRerunningLipo
+
+  dsym_source_file="$lipo_out_file"
+fi
+
+if [ -z "$do_not_override_dsym" -a "$DEBUG_INFORMATION_FORMAT" == "dwarf-with-dsym" ]; then
+  dsym_destination_dir="$DWARF_DSYM_FOLDER_PATH/$DWARF_DSYM_FILE_NAME"
+  echo "Regenerating dsym file (\"$dsym_source_file\" -> \"$dsym_destination_dir\")"
+  xcrun dsymutil "$dsym_source_file" -o "$dsym_destination_dir" || handle_error ERROR_dsymOverrideError
 fi
 
 joined_json=$temp_dir/joined_json

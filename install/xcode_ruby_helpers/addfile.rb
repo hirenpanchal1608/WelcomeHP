@@ -35,10 +35,15 @@ class AddFile
         @project.targets.each do |t| 
           t.frameworks_build_phase.files << buildFile if  t.respond_to?("product_type") and t.product_type == "com.apple.product-type.application"
           t.build_configurations.each do |c|
-            framework_search_path = c.build_settings["FRAMEWORK_SEARCH_PATHS"] || []
-            framework_search_path << "$(inherited)"
-            framework_search_path << "#{File.dirname(full_path)}"
-            c.build_settings.merge!('FRAMEWORK_SEARCH_PATHS' => framework_search_path)
+            framework_search_path = c.build_settings["FRAMEWORK_SEARCH_PATHS"]
+	    if(framework_search_path.nil?)
+              framework_search_path = c.build_settings["FRAMEWORK_SEARCH_PATHS"] = []
+	    end
+
+	    inherited="$(inherited)"
+	    framework_search_path << inherited unless framework_search_path.include? inherited
+
+            framework_search_path << File.dirname(full_path)
           end
         end
         return 0

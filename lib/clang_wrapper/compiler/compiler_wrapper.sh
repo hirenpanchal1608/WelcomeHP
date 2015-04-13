@@ -8,7 +8,13 @@ export ROLLOUT_COMPILER_WRAPPER="$0"
 clang_path=`/usr/bin/xcrun -f $(basename "$0")`
 
 if [[ $@ =~ RolloutDynamic.o ]]; then
-  obj_path=`echo $@ | sed -e 's/.* -o \(.*RolloutDynamic.o\).*/\1/'`
+  for ((i=0; i<$#; i++)); do
+    [ "${!i}" == "-o" ] || continue
+    let i++
+    obj_path="${!i}"
+    break
+  done
+
   {
     echo "$clang_path"
     for ((i=1; i <= $#; i++)); do
@@ -17,7 +23,12 @@ if [[ $@ =~ RolloutDynamic.o ]]; then
     echo
   } > "${obj_path%o}rollout_compile_cmd"
 
-  m_path=`echo $@ | sed -e 's@.* \(/.*RolloutDynamic.m\).*@\1@'`
+  for ((i=0; i<$#; i++)); do
+    [[ "${!i}" =~ RolloutDynamic.m ]] || continue
+    m_path="${!i}"
+    break
+  done
+
   cat < /dev/null > "${m_path%/*}/RolloutSwizzlerDynamic.include"
 fi
 

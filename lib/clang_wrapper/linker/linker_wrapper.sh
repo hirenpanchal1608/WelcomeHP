@@ -11,7 +11,13 @@ else
   clang_path=`/usr/bin/xcrun -f $(basename "$0")`
 fi
 
-linker_cmd_file="`echo $@ | sed -e 's/.* -filelist //' -e 's/ -.*//' -e 's/\.[^.]*$//'`".rollout_linker_cmd
+for ((i=0; i<$#; i++)); do
+  [ "${!i}" == "-filelist" ] || continue
+  let i++
+  filelist="${!i}"
+  break
+done
+linker_cmd_file="${filelist%.LinkFileList}".rollout_linker_cmd
 {
   echo "$clang_path"
   for ((i=1; i <= $#; i++)); do
