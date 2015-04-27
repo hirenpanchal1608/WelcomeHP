@@ -22,6 +22,7 @@ ERROR_extractSymbolsErrors=("message=ExtractSymbols generated errors")
 ERROR_cmdNotFound=("exit=5" "message=Missing .cmd file, do you have proper CC/LD settings? Missing file" "xcode_alert=error")
 ERROR_swiftDetected=("exit=6" "message=This Rollout.io version does not support Swift. Please contact us at support@rollout.io" "xcode_alert=error")
 ERROR_dsymOverrideError=("message=dSYM regenerating failed" "xcode_alert=warning")
+ERROR_couldNotReadInfoPlistValue=("exit=7" "message=Could not read info.plist value. Please contact us at support@rollout.io. Details" "xcode_alert=error")
 handle_error() { #{{{
   eval local error=('"${'$1'[@]}"')
   local details="$2"
@@ -40,7 +41,10 @@ handle_error() { #{{{
 temp_dir=`mktemp -d /tmp/rollout_tmp.XXX`
 
 get_info_plist_value() {
-  eval echo $(/usr/libexec/PlistBuddy -c "Print $1" "$SRCROOT/$INFOPLIST_FILE" | sed -e 's/\$(/\\$\\(/g' -e 's/)/\\)/g')
+  local infoplist_fullpath
+  [ ${INFOPLIST_FILE::1} == / ] && infoplist_fullpath="$INFOPLIST_FILE" || infoplist_fullpath="$SRCROOT/$INFOPLIST_FILE"
+  eval echo $(/usr/libexec/PlistBuddy -c "Print $1" "$infoplist_fullpath" | sed -e 's/\$(/\\$\\(/g' -e 's/)/\\)/g') ||
+    handle_error ERROR_couldNotReadInfoPlistValue "pwd: `pwd`, SRCROOT: \"$SRCROOT\", INFOPLIST_FILE: \"$INFOPLIST_FILE\", key: \"$1\""
 }
 
 extract_cmd_data() { #{{{
