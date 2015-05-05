@@ -1,5 +1,5 @@
 //
-//  Rollout SDK version 0.8.3, Build 68
+//  Rollout SDK version 0.8.4, Build 73
 //
 //  Copyright (c) 2014 Rollout.io. All rights reserved.
 //
@@ -14,3 +14,4 @@
 +(void) setup: (NSString*) projectId debug: (BOOL) debug __attribute__ ((deprecated));
 
 @end
+

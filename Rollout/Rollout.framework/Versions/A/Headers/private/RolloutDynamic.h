@@ -18,3 +18,4 @@
 
 @interface RolloutDynamic : NSObject <RolloutDynamic>
 @end
+

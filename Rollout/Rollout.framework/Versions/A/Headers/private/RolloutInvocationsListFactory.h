@@ -24,3 +24,4 @@
 - (instancetype)initWithProducer:(RolloutActionProducer *)producer rolloutErrors:(RolloutErrors *)rolloutErrors typeWrapperFactory:(RolloutTypeWrapperFactory *)typeWrapperFactory typeWrapperGeneratorFactory:(RolloutTypeWrapperGeneratorFactory *)typeWrapperGeneratorFactory conditionValuesFactory:(RolloutConditionValuesFactory *)conditionValuesFactory;
 
 @end
+

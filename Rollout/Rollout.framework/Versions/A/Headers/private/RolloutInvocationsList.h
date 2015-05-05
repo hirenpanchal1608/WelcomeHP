@@ -19,3 +19,4 @@
 -(RolloutInvocation *)invocationForArguments:(NSArray *)arguments;
 
 @end
+

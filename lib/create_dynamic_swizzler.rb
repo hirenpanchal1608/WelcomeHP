@@ -110,8 +110,8 @@ def wrapping(scope)
     #{r} (*originalFunction)(id rcv, SEL _cmd#{arg_dec}) = (void *) originalImplementation;
 
     NSArray *originalArguments = @[#{arguments}];
-    NSArray *tweakConfiguration = _configuration.configurationsByMethodId[methodId];
-    RolloutInvocationsList *invocationsList = [_invocationsListFactory invocationsListFromTweakConfiguration:tweakConfiguration];
+    NSArray *tweakConfiguration = self->_configuration.configurationsByMethodId[methodId];
+    RolloutInvocationsList *invocationsList = [self->_invocationsListFactory invocationsListFromTweakConfiguration:tweakConfiguration];
     RolloutInvocation *inv = [invocationsList invocationForArguments:originalArguments];
     
     if(!inv) {

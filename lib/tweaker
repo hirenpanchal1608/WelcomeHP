@@ -142,8 +142,8 @@ EOF
 
 echo "Rollout post compile script"
 
-required_installed_build=`(. "$LIB_DIR"/versions; echo $required_installed_build)`
-[ 0$ROLLOUT_lastConfiguredBuildInXcodeproj -ge $required_installed_build ] || {
+xcodeproj_configuration=`(. "$LIB_DIR"/versions; echo $xcodeproj_configuration)`
+[ 0$ROLLOUT_lastXcodeprojConfiguration -ge $xcodeproj_configuration ] || {
   cat << end_of_error_msg
 Rollout.io SDK version was not reconfigured, aborting...
 Our guess is that you changed Rollout.io version in your podfile, but have not reconfigured it yet.
@@ -177,6 +177,7 @@ cache_sdk_version="$CACHE_DIR"/sdk_version
 preprocessor_debug=""; [ -z "$GCC_PREPROCESSOR_DEFINITIONS" ] || preprocessor_debug=`(eval typeset $GCC_PREPROCESSOR_DEFINITIONS; echo ${DEBUG+1})`
 bundle_version=`get_info_plist_value CFBundleVersion`
 rollout_build=`(. "$LIB_DIR"/versions; echo $build)`
+structure_version=`(. "$LIB_DIR"/versions; echo $structure)`
 
 [ -d "$CACHE_DIR" -a -r "$cache_sdk_version" ] && [ "`cat "$cache_sdk_version"`" == "$current_sdk_version" ] || {
   echo "Rollout: sdk version changed, cleaning cache..."
@@ -285,7 +286,7 @@ create_json_file() { #{{{
       cat $joined_json
       echo -n ','
     }
-    echo -n "\"md5\":\"$data_md5\",\"env_GCC_PREPROCESSOR_DEFINITIONS__DEBUG\":\"$preprocessor_debug\",\"rollout_appKey\":\"$app_key\",\"CFBundleShortVersionString\":\"$ROLLOUT_shortVersion\",\"CFBundleVersion\":\"$bundle_version\",\"rollout_build\":\"$rollout_build\"}"
+    echo -n "\"md5\":\"$data_md5\",\"env_GCC_PREPROCESSOR_DEFINITIONS__DEBUG\":\"$preprocessor_debug\",\"rollout_appKey\":\"$app_key\",\"CFBundleShortVersionString\":\"$ROLLOUT_shortVersion\",\"CFBundleVersion\":\"$bundle_version\",\"rollout_build\":\"$rollout_build\",\"structure_version\":\"$structure_version\"}"
   } > "$json_file"
 } #}}}
 create_json_file "$JSON_WITH_DATA" include_data

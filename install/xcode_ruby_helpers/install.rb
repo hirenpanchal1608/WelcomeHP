@@ -26,10 +26,10 @@ files_to_add.each do |full_path|
 end
 
 base_dir = "#{File.dirname __FILE__}/../.."
-build=`. '#{base_dir}/lib/versions' ; /bin/echo -n $build`
+xcodeproj_configuration=`. '#{base_dir}/lib/versions' ; /bin/echo -n $xcodeproj_configuration`
 
 tweaker_d_flag = tweaker_phase_before_linking ? "-d" : ""
-script_content = "ROLLOUT_lastConfiguredBuildInXcodeproj=#{build} \"\${SRCROOT}/#{sdk_subdir}/lib/tweaker\" #{tweaker_d_flag} -k #{app_key}"
+script_content = "ROLLOUT_lastXcodeprojConfiguration=#{xcodeproj_configuration} \"\${SRCROOT}/#{sdk_subdir}/lib/tweaker\" #{tweaker_d_flag} -k #{app_key}"
 CreateScript.new(project).create_script("Rollout.io post-build", script_content, tweaker_phase_before_linking)
 
 OverrideClang.new(project).install("\${SRCROOT}/#{sdk_subdir}/lib")

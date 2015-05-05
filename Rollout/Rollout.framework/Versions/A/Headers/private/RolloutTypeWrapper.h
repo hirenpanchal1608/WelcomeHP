@@ -108,3 +108,4 @@ typedef enum {
 @property (nonatomic, readonly) size_t recordSize;
 
 @end
+
