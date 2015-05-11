@@ -1,5 +1,5 @@
 # The file is sourced by bash, so the only expressions allowed are assignments without spaces
-build=44
-lib=0.7.2
+build=71
+lib=0.7.3
 api=1.4.1
 mode=production

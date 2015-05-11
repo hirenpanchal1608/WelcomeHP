@@ -150,7 +150,7 @@ date  +"%s : done reading code" >> $LOG_FILE
 echo -ne "]" >> "$TMP_FILE"
 
 data_md5=$(cat "$TMP_FILE" | md5)
-preprocessor_debug=`( eval $GCC_PREPROCESSOR_DEFINITIONS; echo $DEBUG )`
+preprocessor_debug=`(eval typeset $GCC_PREPROCESSOR_DEFINITIONS; echo ${DEBUG+1})`
 bundle_short_version=`get_info_plist_value CFBundleShortVersionString`
 bundle_version=`get_info_plist_value CFBundleVersion`
 rollout_build=`(. "$LIB_DIR"/versions; echo $build)`
