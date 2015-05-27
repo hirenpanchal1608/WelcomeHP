@@ -16,6 +16,9 @@
 - (instancetype)initWithInvocationsListFactory:(id <RolloutInvocationsListFactory>)invocationsListFactory configuration:(RolloutConfiguration *)configuration;
 @end
 
-@interface RolloutDynamic : NSObject <RolloutDynamic>
+@interface RolloutDynamic : NSObject <RolloutDynamic> {
+    id<RolloutInvocationsListFactory> _invocationsListFactory;
+    RolloutConfiguration *_configuration;
+}
 @end
 

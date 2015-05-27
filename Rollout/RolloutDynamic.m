@@ -17,8 +17,6 @@
 
 
 @implementation RolloutDynamic {
-    id<RolloutInvocationsListFactory> _invocationsListFactory;
-    RolloutConfiguration *_configuration;
 }
 
 - (instancetype)initWithInvocationsListFactory:(id <RolloutInvocationsListFactory>)invocationsListFactory configuration:(RolloutConfiguration *)configuration
@@ -37,6 +35,3 @@
 }
 
 @end
-
-#include "RolloutSwizzlerDynamic.include"
-

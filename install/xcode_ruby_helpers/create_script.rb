@@ -17,7 +17,14 @@ class CreateScript
         script_build_phase = @project.new(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
         script_build_phase.name = title
         script_build_phase.shell_script = content
-        compile_index = build_phases.find_index { |b| b.display_name == (before_linking ? "SourcesBuildPhase" : "ResourcesBuildPhase") }
+	if before_linking
+          compile_index = build_phases.find_index { |b| b.display_name == "SourcesBuildPhase" }
+	else
+          compile_index = [
+	    build_phases.find_index { |b| b.display_name == "ResourcesBuildPhase" },
+	    build_phases.find_index { |b| b.display_name == "FrameworksBuildPhase" }
+	  ].max
+	end
         build_phases.insert(compile_index + 1, script_build_phase) unless compile_index.nil?
       end
     end

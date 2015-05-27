@@ -44,9 +44,10 @@ app_key=$2
   "app_key": "$app_key",
   "files_to_add": [
     "Rollout-ios-SDK/Rollout/RolloutDynamic.m",
-    "\$(PROJECT_DIR)/Rollout-ios-SDK/Rollout/Rollout.framework"
+    "Rollout-ios-SDK/Rollout/Rollout.framework"
   ],
   `[ -z "$tweaker_before_linking" ] || echo "\"tweaker_phase_before_linking\": 1,"`
   "sdk_subdir": "Rollout-ios-SDK"
 }
 EOF
+

@@ -14,7 +14,7 @@ STRUCTURES_PENDING_UPLOAD_DIR="${STRUCTURES_DIR}/pending_upload"
 STRUCTURES_ARCHIVE_DIR="${STRUCTURES_DIR}/archive"
 JSON_WITH_DATA="$CACHE_DIR/tweaker_functions.json"
 JSON_WITHOUT_DATA="$CACHE_DIR/tweaker_functions_stripped.json"
-dynamic_include="${ROLLOUT_DIR}/Rollout/RolloutSwizzlerDynamic.include"
+rollout_dynamic_m="${ROLLOUT_DIR}/Rollout/RolloutDynamic.m"
 
 ERROR_expectedLargerBinaryAfterRelinking=("message=Expected larger binary after relinking" "xcode_alert=warning")
 ERROR_expectedLargerBinaryAfterRerunningLipo=("message=Expected larger binary after rerunning lipo" "xcode_alert=warning")
@@ -85,6 +85,32 @@ get_opt_arg() { #{{{
     return
   done
 } #}}}
+
+unset measurements_list
+measurements_locals() {
+  local start=RolloutTweakerMeasurements__$1__start
+  local finish=RolloutTweakerMeasurements__$1__finish
+  local duration=RolloutTweakerMeasurements__$1__duration
+  echo "start=$start finish=$finish duration=$duration"
+}
+
+begin_measurement() {
+  local `measurements_locals $1`
+  [ -z "${!start}" ] || echo "warning: overriding start measurement for $1"
+  local value=`ruby -e 'puts Time.now.to_f'`
+  eval $start=$value
+  measurements_list[${#measurements_list[*]}]=$1
+}
+
+end_measurement() {
+  local `measurements_locals $1`
+  [ -z "${!finish}" ] || echo "warning: overriding finish measurement for $1"
+  local value=`ruby -e 'puts Time.now.to_f'`
+  eval $finish=$value
+  eval $duration=$(echo ${!finish} - ${!start} | bc)
+}
+
+begin_measurement ALL
 
 unset app_key help exit disable_upload clean disable_locale_enforcement do_not_override_dsym
 while getopts "k:hmcld" option; do #{{{
@@ -186,63 +212,86 @@ structure_version=`(. "$LIB_DIR"/versions; echo $structure)`
 mkdir -p "$CACHE_DIR"
 echo $current_sdk_version > "$cache_sdk_version"
 
+touch "$rollout_dynamic_m"
+
 typeset -i number_of_archs=0
-for linker_list_file in ${!LINK_FILE_LIST_*}; do
+for linker_list_file in ${!LINK_FILE_LIST_normal_*}; do
   let number_of_archs++
-  arch="${linker_list_file#LINK_FILE_LIST_}"
+  arch="${linker_list_file#LINK_FILE_LIST_normal_}"
+  echo "Rollout: going to generate structure and code for architecture $arch"
   arch_json=$temp_dir/arch_json.$arch
-  extract_cmd_data "${!linker_list_file%.*}.rollout_linker_cmd" linker_cmd linker_args
+  linker_cmd_file="${!linker_list_file%.*}.rollout_linker_cmd"
+  extract_cmd_data "$linker_cmd_file" linker_cmd linker_args
   linker_out_file=`get_opt_arg linker_args -o`
 
   dsym_file=$temp_dir/tmp.dsym
+  begin_measurement temp_dsymutil_$arch
   xcrun dsymutil "$linker_out_file" -o "$dsym_file"
+  end_measurement temp_dsymutil_$arch
   
+  begin_measurement extract_symbols_$arch
   extract_symbols_errors=$({ "$LIB_DIR/ExtractSymbols" "`ls -1 "$dsym_file"/Contents/Resources/DWARF/* | head -1`" "$LIB_DIR"/static_json_part > $arch_json; } 2>&1 | while read line; do echo -n "$line\\n"; done)
   [ -z "$extract_symbols_errors" ] || handle_error ERROR_extractSymbolsErrors "$extract_symbols_errors"
+  end_measurement extract_symbols_$arch
 
-  cat > "$dynamic_include" << end_of_dynamic_include_part1
-@implementation RolloutDynamic(arch)
-+ (NSString *)currentArch {return @"$arch";} 
-@end
+  dynamic_files_prefix="$temp_dir/dynamic_include.$TARGET_NAME.$arch."
+  begin_measurement create_dynamic_swizzler_$arch
+  "${LIB_DIR}/create_dynamic_swizzler.rb" $arch_json "$dynamic_files_prefix" $arch || exit 3
+  end_measurement create_dynamic_swizzler_$arch
 
-end_of_dynamic_include_part1
-  "${LIB_DIR}/create_dynamic_swizzler.rb" $arch_json >> "$dynamic_include" || exit 3
-
+  structs_header="${dynamic_files_prefix}structs.h"
   rollout_dynamic_o_file=`cat "${!linker_list_file}" | grep RolloutDynamic.o`
   rollout_dynamic_cmd_file="${rollout_dynamic_o_file%o}rollout_compile_cmd"
-  cached_dynamic_o="$CACHE_DIR/$TARGET_NAME.$arch.RolloutDynamic.o"
-  cached_dynamic_md5="${cached_dynamic_o%o}md5"
-  [ -f "$rollout_dynamic_cmd_file" ] &&
-    dynamic_md5=`cat "$dynamic_include" "$rollout_dynamic_cmd_file" | md5` ||
-      dynamic_md5=""
-  echo "Rollout: Going to override RolloutDynamic.o for architecture $arch ($rollout_dynamic_o_file)"
-  if [ "`cat "$cached_dynamic_md5" 2>/dev/null`" == $dynamic_md5 -a -f "$cached_dynamic_o" ]; then
-    echo "Rollout: using cached RolloutDynamic"
-    cp -fv "$cached_dynamic_o" "$rollout_dynamic_o_file"
-  else
-    echo "Rollout: compiling RolloutDynamic"
-    extract_cmd_data "$rollout_dynamic_cmd_file" rollout_dynamic_cc_cmd rollout_dynamic_cc_args
-    "$rollout_dynamic_cc_cmd" "${rollout_dynamic_cc_args[@]}" && {
-      cp -f "$rollout_dynamic_o_file" "$cached_dynamic_o"
-      echo "$dynamic_md5" > "$cached_dynamic_md5"
-    }
+  if [ -f "$rollout_dynamic_cmd_file" ] ; then
+    sed -i "" -e 's@.*/RolloutDynamic\.m$@__rollout_dynamic_input_file__@' -e 's@.*RolloutDynamic\.o@__rollout_dynamic_output_file__@' "$rollout_dynamic_cmd_file"
+    sed -i "" -E '/^(-MF|--serialize-diagnostics)/ { N; d; }' "$rollout_dynamic_cmd_file"
+    rollout_dynamic_cmd_md5=`cat "$rollout_dynamic_cmd_file" "$structs_header" | md5`
   fi
+  extract_cmd_data "$rollout_dynamic_cmd_file" rollout_dynamic_cc_cmd rollout_dynamic_cc_args
 
+  begin_measurement rollout_dynamic_compilation_$arch
+  unset all_dynamic_o_files
+  max_concurrent_jobs=`sysctl -n hw.ncpu`
+  for dynamic_include in "$dynamic_files_prefix"*.m; do
+    dynamic_m_basename=`basename "$dynamic_include"`
+    dynamic_output="`dirname "$rollout_dynamic_o_file"`/${dynamic_m_basename%m}o"
+    all_dynamic_o_files[${#all_dynamic_o_files[*]}]="$dynamic_output"
+    cached_dynamic_o="$CACHE_DIR/${dynamic_output##*/}"
+    cached_dynamic_md5="${cached_dynamic_o%o}md5"
+    dynamic_cmd="${dynamic_include%m}cc_cmd"
+    dynamic_md5=`{ echo $rollout_dynamic_cmd_md5; cat "$dynamic_include"; } | md5`
+  
+    if [ "`cat "$cached_dynamic_md5" 2>/dev/null`" == "$dynamic_md5" -a -f "$cached_dynamic_o" ]; then
+      echo "Rollout: using cache for ${dynamic_output##*/}"
+      cp "$cached_dynamic_o" "$dynamic_output"
+    else
+      while [ `jobs -p | wc -l` -ge $max_concurrent_jobs ]; do sleep 0.1; done
+      echo "Rollout: compiling ${dynamic_include##*/}"
+      sed -i "" -e "s@{{ROLLOUT_TEMPLATE__structs_file}}@${structs_header}@" "$dynamic_include"
+      rollout_dynamic_cc_args_tmp=("${rollout_dynamic_cc_args[@]/__rollout_dynamic_input_file__/$dynamic_include}")
+      rollout_dynamic_cc_args_specific=("${rollout_dynamic_cc_args_tmp[@]/__rollout_dynamic_output_file__/$dynamic_output}")
+      "$rollout_dynamic_cc_cmd" "${rollout_dynamic_cc_args_specific[@]}" && {
+        cp -f "$dynamic_output" "$cached_dynamic_o"
+        echo "$dynamic_md5" > "$cached_dynamic_md5"
+      } &
+    fi
+  done
+  wait
+  end_measurement rollout_dynamic_compilation_$arch
+
+  printf '%s\n' "${all_dynamic_o_files[@]}" >> "${!linker_list_file}"
   echo "Rollout: relinking ($arch) => $linker_out_file"
   declare -i size_before=`stat -f\%z "$linker_out_file"`
+  begin_measurement linking_$arch
   "$linker_cmd" "${linker_args[@]}"
+  end_measurement linking_$arch
   declare -i size_after=`stat -f\%z "$linker_out_file"`
   [ $size_before -lt $size_after ] || handle_error ERROR_expectedLargerBinaryAfterRelinking
 done
 
 if [ $number_of_archs == 1 ]; then
-  touch "$dynamic_include"
   dsym_source_file="$linker_out_file"
 else
-  cat > "$dynamic_include" << end_of_multi_arch_dynamic_include
-// The file was devnulled during multi-arch build to prevent confusion
-end_of_multi_arch_dynamic_include
-
   echo "Rollout: running lipo"
   extract_cmd_data "$TARGET_BUILD_DIR"/rollout_lipo_cmd lipo_cmd lipo_args
   lipo_out_file=`get_opt_arg lipo_args -output`
@@ -257,7 +306,9 @@ fi
 if [ -z "$do_not_override_dsym" -a "$DEBUG_INFORMATION_FORMAT" == "dwarf-with-dsym" ]; then
   dsym_destination_dir="$DWARF_DSYM_FOLDER_PATH/$DWARF_DSYM_FILE_NAME"
   echo "Regenerating dsym file (\"$dsym_source_file\" -> \"$dsym_destination_dir\")"
+  begin_measurement final_dsymutil
   xcrun dsymutil "$dsym_source_file" -o "$dsym_destination_dir" || handle_error ERROR_dsymOverrideError
+  end_measurement final_dsymutil
 fi
 
 joined_json=$temp_dir/joined_json
@@ -326,3 +377,14 @@ if [ -r  "${INSTALL_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}" ]; then
   echo "Rollout: Installation mode, special copy" 
   cp -v "$JSON_WITHOUT_DATA"  "${INSTALL_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
 fi #}}}
+
+end_measurement ALL
+echo "Measurements results: "
+for measurement_title in ${measurements_list[*]}; do
+  prefix=RolloutTweakerMeasurements__${measurement_title}__
+  duration="${prefix}duration"
+  [ -n "${!duration}" ] || continue
+  start=${prefix}start
+  finish=${prefix}finish
+  echo "    ${measurement_title}: ${!duration}  (${!start} - ${!finish})"
+done

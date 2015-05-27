@@ -1,0 +1,141 @@
+#!/usr/bin/env ruby
+
+require 'json'
+
+begin
+  require 'xcodeproj'
+  $xcodeproj_available = true
+rescue LoadError
+  $xcodeproj_available = false
+end
+
+def env(name)
+  value = ENV[name]
+  return value.nil? ? "" : value
+end
+
+def env_with_replaced_current_arch(name)
+  return env(name).sub(/\b#{env("CURRENT_ARCH")}\b/, "#{$arch}")
+end
+
+def split_with_spaces(value)
+  value.rstrip().split(" /").map {|e| e.start_with?("/") ? e : "/#{e}" }
+end
+
+def recursively_extract_value(data, eval_required)
+  env_var = data["environmentVariable"]
+  return data if env_var.nil?
+
+  STDERR.puts("warning: data: #{data}")
+  env_value = ENV[env_var]
+  eval_required = data["evalRequired"] unless eval_required == true
+  comparison_type = data["comparisonType"]
+  segregation = data["segregation"]
+  if comparison_type.nil? || comparison_type == "string"
+    segregation_key = env_value
+  elsif comparison_type == "regex"
+    segregation_key = segregation.keys.find {|pattern| env_value[/#{pattern}/]}
+  else
+    STDERR.puts("error: unknown comparisonType \"#{comparisonType}\". Exception: #{e.message}, Backtrace: #{e.backtrace.inspect}")
+    return
+  end
+  STDERR.puts("warning: env_var: #{env_var}")
+  STDERR.puts("warning: segregation_key: #{segregation_key}")
+  subdata = segregation[segregation_key]
+  if subdata.nil?
+    value = segregation["*"]
+  else
+    value = recursively_extract_value(subdata, eval_required)
+  end
+  value = subdata["*"] if value.nil?
+  value = `exec echo -n "#{value}"`
+  return value
+end
+
+def tweak_environment
+  config_file = ENV["ROLLOUT_DERIVE_LINKER_CMD_CONFIG"]
+  return if config_file.nil?
+
+  begin
+    json = JSON.parse(File.read(config_file))
+  rescue
+    STDERR.puts("error: Couldn't parse json \"#{config_file}\" (defined in the ROLLOUT_DERIVE_LINKER_CMD_CONFIG variable)")
+    return
+  end
+
+  begin
+    json["buildSettings"].each do |setting, value|
+      value = recursively_extract_value(value, false)
+      if value.nil?
+        STDERR.puts("error: Could not extract setting #{setting} for arch \"#{$arch}\" in the ROLLOUT_DERIVE_LINKER_CMD_CONFIG json (#{config_file})")
+        return
+      end
+      ENV[setting] = value
+    end
+  rescue Exception => e
+    STDERR.puts("error: Some error occured, probably incorrect setting in the ROLLOUT_DERIVE_LINKER_CMD_CONFIG json (#{config_file}). Exception: #{e.message}, Backtrace: #{e.backtrace.inspect}")
+  end
+end
+
+abort "derive_linker_cmd: arch argument is required" unless ARGV.length > 0
+$arch = ARGV[0]
+
+if $xcodeproj_available
+  project = Xcodeproj::Project.new(env("PROJECT_FILE_PATH"))
+  project.initialize_from_file
+  target = project.objects.select { |o|
+    o.isa == "PBXNativeTarget" && o.name == env("TARGET_NAME")
+  }[0]
+  
+  frameworks_args = target.build_phases.find { |phase|
+    phase.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase)
+  }.files.flat_map { |file|
+    path = file.file_ref.path
+    path = path.gsub(/.*\//, "")
+    if ! path.match(/\.framework$/).nil?
+      result = ["-framework", path.gsub(/.framework$/, "")]
+    elsif ! path.match(/^lib.*\.a$/).nil?
+      lib = path.gsub(/^lib/, '').gsub(/.a$/, '')
+      result = ["-l#{lib}"]
+    else
+      result = []
+    end
+  
+    result
+  }
+else
+  frameworks_args = []
+  puts "RolloutError_NoXcodeprojAvailable" # TODO: this should be removed once we start using the script not just for reporting
+end
+
+tweak_environment
+
+args = []
+
+args.push `xcrun -f clang`
+args.push "-arch", $arch
+args.push "-bundle" if ENV["MACH_O_TYPE"] == "mh_bundle"
+args.push "-isysroot", env("SDK_DIR")
+split_with_spaces(env("LIBRARY_SEARCH_PATHS")).each {|library_path| args.push "-L#{library_path}"}
+split_with_spaces(env("FRAMEWORK_SEARCH_PATHS")).each {|framework_path| args.push "-F#{framework_path}"}
+args.push "-filelist", env("LINK_FILE_LIST_normal_#{$arch}")
+args.push "-exported_symbols_list", env("EXPORTED_SYMBOLS_FILE") unless ENV["EXPORTED_SYMBOLS_FILE"].nil?
+args.push "-Xlinker", "--no-demangle" if ENV["LINKER_DISPLAYS_MANGLED_NAMES"] == "YES"
+args.push "-Xlinker", "-no_pie" if ENV["LD_NO_PIE"] == "YES"
+env("LD_RUNPATH_SEARCH_PATHS").split(" ").each {|path| args.push "-Xlinker", "-rpath", "-Xlinker", path}
+args.push "-Xlinker", "-map", "-Xlinker", env_with_replaced_current_arch("LD_MAP_FILE_PATH") if ENV["LD_GENERATE_MAP_FILE"] == "YES"
+args.push "-nostdlib" if ENV["LINK_WITH_STANDARD_LIBRARIES"] == "NO"
+args.push "-keep_private_externs" if ENV["KEEP_PRIVATE_EXTERNS"] == "YES"
+args.push "-dead_strip" if env("DEAD_CODE_STRIPPING") == "YES"
+args.push "-no_dead_strip_inits_and_terms" if ENV["PRESERVE_DEAD_CODE_INITS_AND_TERMS"] == "YES"
+args.push("-bundle_loader", env("BUNDLE_LOADER")) unless ENV["BUNDLE_LOADER"].nil?
+args.push "-Xlinker", "-order_file", "-Xlinker", env_with_replaced_current_arch("ORDER_FILE") unless ENV["ORDER_FILE"].nil?
+env("OTHER_LDFLAGS").split(" ").each {|flag| args.push flag}
+args.push "-fobjc-arc" if env("CLANG_ENABLE_OBJC_ARC") == "YES"
+args.push "-fobjc-link-runtime"
+args.push "-miphoneos-version-min=#{env("IPHONEOS_DEPLOYMENT_TARGET")}"
+args.push *frameworks_args
+args.push "-Xlinker", "-dependency_info", "-Xlinker", env_with_replaced_current_arch("LD_DEPENDENCY_INFO_FILE")
+args.push "-o", "#{env("OBJECT_FILE_DIR_normal")}/#{$arch}/#{env("EXECUTABLE_NAME")}"
+
+args.each {|arg| puts arg.gsub(/["']/, '')}

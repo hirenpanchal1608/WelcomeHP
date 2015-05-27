@@ -1,7 +1,13 @@
 #!/usr/bin/env ruby
 
 require "JSON"
+require 'zlib'
 require_relative "errors_reporter"
+
+if ARGV.length != 3
+  STDERR.puts "Usage:\n$0: <input_json> <output_chunks_prefix> <arch>"
+  exit 1
+end
 
 def wrapping(scope)
   producer_signature = scope[:producer_signature]
@@ -159,8 +165,10 @@ def wrapping(scope)
 "
 end
 
-input = JSON.parse(ARGF.read)
-symbols  = input["methods"]
+input = JSON.parse(File.read(ARGV[0]))
+chunks_prefix = ARGV[1]
+#arch = ARGV[2]
+symbols = input["methods"].flat_map {|c| c["children"]}
 $structs = input["structs"]
 
 ignored_types = ["ConstantArray", "IncompleteArray", "FunctionProto", "Invalid", "Unexposed", "NullPtr","Overload","Dependent","ObjCId","ObjCClass","ObjCSel","FirstBuiltin","LastBuiltin","Complex","LValueReference","RValueReference","Typedef","ObjCInterface","FunctionNoProto","Vector","VariableArray","DependentSizedArray","MemberPointer"]
@@ -227,77 +235,114 @@ def object_signature_type(object)
 end
 
 defines = []
-symbols.each { |c| 
-  c["children"].select(&valid_for_swizzeling).each { |m| 
-    m["args"].each { |a| 
-      #types.push(a["size"]) if a["kind"] == "Record" 
-      m["__should_be_removed"] = true if ignored_types.include?( a["kind"]) or a["kind"].nil?
-      if a["kind"] == "Record"
-        a["struct_name"] = struct_name(a)
-      end
-    }
-    m["__should_be_removed"] = true  if ignored_types.include?( m["return"]["kind"]) or m["return"]["kind"].nil?
-    if m["return"]["kind"] == "Record"
-      m["return"]["struct_name"] = struct_name(m["return"])
+symbols.each.select(&valid_for_swizzeling).each { |m| 
+  m["args"].each { |a| 
+    m["__should_be_removed"] = true if ignored_types.include?( a["kind"]) or a["kind"].nil?
+    if a["kind"] == "Record"
+      a["struct_name"] = struct_name(a)
     end
   }
+  m["__should_be_removed"] = true  if ignored_types.include?( m["return"]["kind"]) or m["return"]["kind"].nil?
+  if m["return"]["kind"] == "Record"
+    m["return"]["struct_name"] = struct_name(m["return"])
+  end
 }
-def print_struct(s)
+
+def print_struct(s, output)
   return if s["printed"]
   s["children"].each { |c|
-    print_struct($structs[c["record_data_ref"]]) if c["kind"] == "Record"  
+    print_struct($structs[c["record_data_ref"]], output) if c["kind"] == "Record"  
   }
   name = s["name"]
-  puts "typedef struct #{name} {"
+  output.puts "typedef struct #{name} {"
   s["children"].each { |c|
     next if c.empty?
     type = c["kind"] == "Record" ? $structs[c["record_data_ref"]]["name"] : fix_type_issue(c)[:type] 
-    puts "  #{type} #{c["symbol"]};"
+    output.puts "  #{type} #{c["symbol"]};"
   }
-  puts "} #{name};"
+  output.puts "} #{name};"
   s["printed"] = true
 end
+
+structs_output_filename = "#{chunks_prefix}structs.h"
+structs_output = File.open(structs_output_filename, "w")
 $structs.values.each { |s| 
-  print_struct(s)
+  print_struct(s, structs_output)
 }
 defines.uniq().each { |i|
-  puts "#import #{i}"
+  structs_output.puts "#import #{i}"
 }
-puts "@implementation RolloutDynamic(blocks)"
+structs_output.close
 
 producer_signatures_hash = {}
-symbols.each { |c| 
-  c["children"].select(&valid_for_swizzeling).each { |m| 
-    method_return_object = fix_type_issue(m["return"])
-    arguments_with_types  = m["args"].map.with_index(&extract_arguments_with_types)
+symbols.each.select(&valid_for_swizzeling).each { |m| 
+  method_return_object = fix_type_issue(m["return"])
+  arguments_with_types  = m["args"].map.with_index(&extract_arguments_with_types)
 
-    method_type = m["kind"] == "instance" ? "instanceMethod" : "classMethod"
-    method_signature_args = [object_signature_type(method_return_object)]
-    arguments_with_types.each{|o| method_signature_args << object_signature_type(o)}
-    method_signature = method_signature_args.join "___"
+  method_type = m["kind"] == "instance" ? "instanceMethod" : "classMethod"
+  method_signature_args = [object_signature_type(method_return_object)]
+  arguments_with_types.each{|o| method_signature_args << object_signature_type(o)}
+  method_signature = method_signature_args.join "___"
 
-    producer_signature = "#{method_type}_#{method_signature}"
-    signature_data = {
-      :return_object => method_return_object,
-      :type =>  m["kind"] == "instance" ? "Instance" : "Class",
-      :args => arguments_with_types,
-      :producer_signature => producer_signature
-    }
-
-    if producer_signatures_hash.has_key? producer_signature
-      if false and signature_data != producer_signatures_hash[producer_signature]
-        ErrorsReporter.report_error("Different method objects share the same signature", {
-          :signature => producer_signature,
-          :objectA => producer_signatures_hash[producer_signature],
-          :objectB => signature_data
-        })
-      end
-      next
-    end
-
-    producer_signatures_hash[producer_signature] = signature_data
-    puts wrapping(signature_data)
+  producer_signature = "#{method_type}_#{method_signature}"
+  signature_data = {
+    :return_object => method_return_object,
+    :type =>  m["kind"] == "instance" ? "Instance" : "Class",
+    :args => arguments_with_types,
+    :producer_signature => producer_signature
   }
+
+  if producer_signatures_hash.has_key? producer_signature
+    if false and signature_data != producer_signatures_hash[producer_signature]
+      ErrorsReporter.report_error("Different method objects share the same signature", {
+        :signature => producer_signature,
+        :objectA => producer_signatures_hash[producer_signature],
+        :objectB => signature_data
+      })
+    end
+    next
+  end
+
+  producer_signatures_hash[producer_signature] = signature_data
 }
 
-puts "@end"
+number_of_chunks = [[4, producer_signatures_hash.keys.length / 40].max, 400].min
+outputs = []
+(0..number_of_chunks).to_a.each { |chunk|
+  chunk_string = "%03d" % chunk
+  output = File.open("#{chunks_prefix}#{chunk_string}.m", "w")
+  outputs.push(output)
+  output.puts "
+#import <Rollout/private/RolloutDynamic.h>
+#import <Rollout/private/RolloutInvocation.h>
+#import <Rollout/private/RolloutTypeWrapper.h>
+#import <Rollout/private/RolloutInvocationsListFactory.h>
+#import <Rollout/private/RolloutErrors.h>
+#import <Rollout/private/RolloutMethodId.h>
+#import <Rollout/private/RolloutConfiguration.h>
+#import <objc/objc.h>
+
+#import \"{{ROLLOUT_TEMPLATE__structs_file}}\"
+"
+
+  if chunk == 0
+    output.puts "
+@implementation RolloutDynamic(arch)
++ (NSString *)currentArch {return @\"#{$arch}\";} 
+@end"
+  end
+
+  output.puts "
+@implementation RolloutDynamic(blocks_#{chunk_string})
+"
+}
+
+producer_signatures_hash.values.each { |signature_data|
+  chunk = Zlib.crc32(signature_data[:producer_signature]).modulo(number_of_chunks)
+  outputs[chunk].puts wrapping(signature_data)
+}
+
+outputs.each { |output|
+  output.puts "@end"
+  output.close
+}
