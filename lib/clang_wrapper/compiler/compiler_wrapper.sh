@@ -2,12 +2,11 @@
 
 set -e
 
-echo "In Rollout.io compiler wrapper ($0)"
 export ROLLOUT_COMPILER_WRAPPER="$0"
 
 clang_path=`/usr/bin/xcrun -f $(basename "$0")`
 
-if [[ $@ =~ RolloutDynamic.o ]]; then
+if [[ $@ =~ RolloutDynamic_[0-9]{2}\.o ]]; then
   for ((i=0; i<$#; i++)); do
     [ "${!i}" == "-o" ] || continue
     let i++
@@ -22,14 +21,6 @@ if [[ $@ =~ RolloutDynamic.o ]]; then
     done
     echo
   } > "${obj_path%o}rollout_compile_cmd"
-
-  for ((i=0; i<$#; i++)); do
-    [[ "${!i}" =~ RolloutDynamic.m ]] || continue
-    m_path="${!i}"
-    break
-  done
-
-  cat < /dev/null > "${m_path%/*}/RolloutSwizzlerDynamic.include"
 fi
 
 "$clang_path" "$@"

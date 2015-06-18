@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export LC_ALL=UTF-8
+
 ERROR_canNotAutoDetectXcodeprojFile=(1 "Sorry, couldn't locate the .xcodeproj file automatically. Please specify it with the -p option")
 ERROR_noAppKeyProvided=(2 "Please specify the app key (use the -k switch)")
 ERROR_illegalOption=(3 "Please use -h for help")
@@ -86,6 +88,8 @@ analytics  rm_exit_status $?
   "xcode_dir": "$xcode_dir",
   "app_key": "$app_key",
   "files_to_add": [
+    "Rollout-ios-SDK/auto_generated_code/RolloutDynamic_structs.h",
+    `seq -f '"Rollout-ios-SDK/auto_generated_code/RolloutDynamic_%02g.m",' 1 20`
     "Pods/Rollout.io/Rollout/RolloutDynamic.m"
   ],
   `[ -z "$tweaker_before_linking" ] || echo "\"tweaker_phase_before_linking\": 1,"`

@@ -2,7 +2,6 @@
 
 set -e
 
-echo "In Rollout.io linker wrapper ($0)"
 export ROLLOUT_LINKER_WRAPPER="$0"
 
 if [ -n "$ROLLOUT_REAL_CLANG" ]; then

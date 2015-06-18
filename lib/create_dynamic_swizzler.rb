@@ -2,14 +2,15 @@
 
 require "JSON"
 require 'zlib'
+require 'set'
 require_relative "errors_reporter"
 
-if ARGV.length != 3
-  STDERR.puts "Usage:\n$0: <input_json> <output_chunks_prefix> <arch>"
+if ARGV.length != 2
+  STDERR.puts "Usage:\n$0: <input_json> <output_chunks_path>"
   exit 1
 end
 
-def wrapping(scope)
+def wrapping(scope) #{{{
   producer_signature = scope[:producer_signature]
   r_k  = scope[:return_object][:kind]
   r  = scope[:return_object][:type]
@@ -163,17 +164,13 @@ def wrapping(scope)
   };
 }
 "
-end
+end #}}}
 
 input = JSON.parse(File.read(ARGV[0]))
-chunks_prefix = ARGV[1]
-#arch = ARGV[2]
-symbols = input["methods"].flat_map {|c| c["children"]}
-$structs = input["structs"]
+chunks_path = ARGV[1]
+chunks_prefix = "#{chunks_path}/RolloutDynamic_"
 
-ignored_types = ["ConstantArray", "IncompleteArray", "FunctionProto", "Invalid", "Unexposed", "NullPtr","Overload","Dependent","ObjCId","ObjCClass","ObjCSel","FirstBuiltin","LastBuiltin","Complex","LValueReference","RValueReference","Typedef","ObjCInterface","FunctionNoProto","Vector","VariableArray","DependentSizedArray","MemberPointer"]
-
-def fix_type_issue(data)
+def fix_type_issue(data) #{{{
   ["origin", "type"].each { |key|
     data[key].gsub!(/\bconst /, "") unless data[key].nil?
   }
@@ -182,7 +179,7 @@ def fix_type_issue(data)
   keep_types = [ "UShort","Char16","Char_U","Char16","Char32","Int128","UInt128","Bool","Float","Short","Long","WChar","ULong","Double","Int","Void","Char_S","UChar","SChar","LongLong","ULongLong","UInt","LongDouble"]
   case 
   when ["CGFloat", "BOOL"].include?(data["origin"])
-    return { :type => data["type"], :kind => data["kind"], :origin => data["origin"]}
+    return { :type => data["origin"], :kind => data["kind"], :origin => data["origin"]}
   when "ObjCObjectPointer" == data["kind"]
     return { :type => "id", :kind => data["kind"]}
   when "Pointer" == data["kind"]
@@ -199,27 +196,16 @@ def fix_type_issue(data)
     ErrorsReporter.report_error("Unknown kind in fix_type_issue", data)
     return nil
   end
-end
+end #}}}
 
-
-extract_arguments_with_types = lambda { |a, index|
+extract_arguments_with_types = lambda { |a, index| #{{{
   t  =  fix_type_issue(a)
   return t if t.nil?
   t[:name] = "arg#{index}"
   t
-}
+} #}}}
 
-valid_for_swizzeling  = lambda { |m|
-  puts "//#{m["symbol"]} removed" if m["__should_be_removed"]
-  return false if m["__should_be_removed"]
-  return false if m["symbol"] == "dealloc" 
-  true
-}
-def struct_name(a)
-  ref = a["record_data_ref"]
-  $structs[ref]["name"]
-end
-def object_signature_type(object)
+def object_signature_type(object) #{{{
   kind = object[:kind]
   type = object[:type]
   origin = object[:origin]
@@ -232,50 +218,86 @@ def object_signature_type(object)
   end
 
   return kind
-end
+end #}}}
 
-defines = []
-symbols.each.select(&valid_for_swizzeling).each { |m| 
+def struct_name(struct_hash) #{{{
+  "__rollout_dummy_struct__#{struct_hash}"
+end #}}}
+
+#TODO change this function to return results_list and not to recieve it
+def process_struct(all_structs_hash, processed_structs, struct_hash, results_list) #{{{
+  return if processed_structs.include?(struct_hash)
+  struct = all_structs_hash[struct_hash]
+  struct["children"].each { |c|
+    process_struct(all_structs_hash, processed_structs, c["record_data_ref"], results_list) if c["kind"] == "Record"  
+  }
+  results_list << struct_hash
+  processed_structs << struct_hash
+end #}}}
+
+methods = input["data"].map { |arch_data|
+    arch_data["data"]["methods"].flat_map {|c| c["children"]}
+  }.flat_map {|array| array}
+methods.each { |m| 
   m["args"].each { |a| 
-    m["__should_be_removed"] = true if ignored_types.include?( a["kind"]) or a["kind"].nil?
     if a["kind"] == "Record"
-      a["struct_name"] = struct_name(a)
+      a["struct_name"] = struct_name(a["record_data_ref"])
     end
   }
-  m["__should_be_removed"] = true  if ignored_types.include?( m["return"]["kind"]) or m["return"]["kind"].nil?
   if m["return"]["kind"] == "Record"
-    m["return"]["struct_name"] = struct_name(m["return"])
+    m["return"]["struct_name"] = struct_name(m["return"]["record_data_ref"])
   end
 }
 
-def print_struct(s, output)
-  return if s["printed"]
-  s["children"].each { |c|
-    print_struct($structs[c["record_data_ref"]], output) if c["kind"] == "Record"  
-  }
-  name = s["name"]
-  output.puts "typedef struct #{name} {"
-  s["children"].each { |c|
-    next if c.empty?
-    type = c["kind"] == "Record" ? $structs[c["record_data_ref"]]["name"] : fix_type_issue(c)[:type] 
-    output.puts "  #{type} #{c["symbol"]};"
-  }
-  output.puts "} #{name};"
-  s["printed"] = true
-end
-
 structs_output_filename = "#{chunks_prefix}structs.h"
-structs_output = File.open(structs_output_filename, "w")
-$structs.values.each { |s| 
-  print_struct(s, structs_output)
+processed_structs = `grep '^typedef struct ' "#{structs_output_filename}" | sed -e 's/^typedef struct __rollout_dummy_struct__//' -e 's/ {$//'`.split("\n").to_set()
+source_structs_hash = input["data"].map {|arch_data| arch_data["data"]["structs"]}.reduce({}, :merge)
+new_structs_list = []
+source_structs_hash.keys.each { |struct_hash| 
+  process_struct(source_structs_hash, processed_structs, struct_hash, new_structs_list)
 }
-defines.uniq().each { |i|
-  structs_output.puts "#import #{i}"
-}
+structs_output = File.open(structs_output_filename, "a")
+if File.size(structs_output_filename) == 0
+  structs_output.puts "// This file is auto generated by Rollout.io SDK during application build process, it should be committed to you repository as part of your code. For more info please checkout the FAQ at http://support.rollout.io
+
+#if defined(__LP64__) && __LP64__
+# define CGFLOAT_TYPE double
+# define CGFLOAT_IS_DOUBLE 1
+# define CGFLOAT_MIN DBL_MIN
+# define CGFLOAT_MAX DBL_MAX
+#else
+# define CGFLOAT_TYPE float
+# define CGFLOAT_IS_DOUBLE 0
+# define CGFLOAT_MIN FLT_MIN
+# define CGFLOAT_MAX FLT_MAX
+#endif
+typedef CGFLOAT_TYPE CGFloat;
+
+#if !defined(OBJC_HIDE_64) && TARGET_OS_IPHONE && __LP64__
+typedef bool BOOL;
+#else
+typedef signed char BOOL;
+#endif
+
+"
+end
+if new_structs_list.length() > 0
+  new_structs_list.each { |struct_hash|
+    struct = source_structs_hash[struct_hash]
+    name = struct_name(struct_hash)
+    structs_output.puts "typedef struct #{name} {"
+    struct["children"].each { |c|
+      next if c.empty?
+      type = c["kind"] == "Record" ? struct_name(c["record_data_ref"]) : fix_type_issue(c)[:type] 
+      structs_output.puts "  #{type} #{c["symbol"]};"
+    }
+    structs_output.puts "} #{name};"
+  }
+end
 structs_output.close
 
 producer_signatures_hash = {}
-symbols.each.select(&valid_for_swizzeling).each { |m| 
+methods.each { |m|
   method_return_object = fix_type_issue(m["return"])
   arguments_with_types  = m["args"].map.with_index(&extract_arguments_with_types)
 
@@ -306,13 +328,15 @@ symbols.each.select(&valid_for_swizzeling).each { |m|
   producer_signatures_hash[producer_signature] = signature_data
 }
 
-number_of_chunks = [[4, producer_signatures_hash.keys.length / 40].max, 400].min
-outputs = []
-(0..number_of_chunks).to_a.each { |chunk|
-  chunk_string = "%03d" % chunk
-  output = File.open("#{chunks_prefix}#{chunk_string}.m", "w")
-  outputs.push(output)
-  output.puts "
+number_of_chunks = 20
+file_names = (1..number_of_chunks).map { |chunk| "#{chunks_prefix}#{"%02d" % chunk}.m" }
+
+existing_signatures_by_chunk = file_names.map.with_index { |file, index|
+  if File.size(file) > 0
+    `grep "^- (id)blockFor_" "#{file}" | sed -e 's/^- (id)blockFor_//' -e 's/_withOriginalImplementation:.*$//'`.split("\n")
+  else
+    File.write(file, "// This file is auto generated by Rollout.io SDK during application build process, it should be committed to you repository as part of your code. For more info please checkout the FAQ at http://support.rollout.io
+
 #import <Rollout/private/RolloutDynamic.h>
 #import <Rollout/private/RolloutInvocation.h>
 #import <Rollout/private/RolloutTypeWrapper.h>
@@ -322,27 +346,36 @@ outputs = []
 #import <Rollout/private/RolloutConfiguration.h>
 #import <objc/objc.h>
 
-#import \"{{ROLLOUT_TEMPLATE__structs_file}}\"
-"
+#import \"RolloutDynamic_structs.h\"
 
-  if chunk == 0
-    output.puts "
-@implementation RolloutDynamic(arch)
-+ (NSString *)currentArch {return @\"#{$arch}\";} 
-@end"
+@implementation RolloutDynamic(blocks_#{index + 1})
+
+@end
+")
+    []
   end
-
-  output.puts "
-@implementation RolloutDynamic(blocks_#{chunk_string})
-"
 }
 
+current_signatures_by_chunk = file_names.map { |file| [] }
 producer_signatures_hash.values.each { |signature_data|
-  chunk = Zlib.crc32(signature_data[:producer_signature]).modulo(number_of_chunks)
-  outputs[chunk].puts wrapping(signature_data)
+  signature = signature_data[:producer_signature]
+  chunk = Zlib.crc32(signature).modulo(number_of_chunks)
+  current_signatures_by_chunk[chunk].push(signature)
 }
 
-outputs.each { |output|
-  output.puts "@end"
-  output.close
+new_signatures_by_chunk = (0..number_of_chunks - 1).map { |chunk|
+  current_signatures_by_chunk[chunk] - existing_signatures_by_chunk[chunk]
+}
+
+new_signatures_by_chunk.each.with_index { |signatures, index|
+  next if signatures.length == 0
+  file_name = file_names[index]
+  `/usr/bin/sed -i "" -e '/^@end$/d' "#{file_name}" > /dev/null`
+  open(file_name, 'a') { |f|
+    signatures.each { |signature|
+      f.puts wrapping(producer_signatures_hash[signature])
+    }
+    f.puts "@end"
+  }
+  puts(file_names[index].split("/").last().split(".")[0])
 }

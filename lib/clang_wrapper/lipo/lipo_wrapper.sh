@@ -2,8 +2,6 @@
 
 set -e
 
-echo "In Rollout.io lipo wrapper"
-
 lipo_path=`/usr/bin/xcrun -f $(basename "$0")`
 
 for ((i=0; i<$#; i++)); do
