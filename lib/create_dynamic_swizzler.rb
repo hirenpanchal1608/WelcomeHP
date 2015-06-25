@@ -189,21 +189,17 @@ def fix_type_issue(data) #{{{
   when "Enum" == data["kind"]
     return { :type => "__rollout_enum", :kind => data["kind"]}
   when "Record" == data["kind"]
+    return nil unless (/unsupported\$/ =~ data["struct_name"]).nil?
     return { :type =>  data["struct_name"], :origin => data["type"], :kind => data["kind"]}
   when keep_types.include?( data["kind"])
     return { :type => data["type"], :kind => data["kind"]}
+  when "unsupported" == data["kind"]
+    return nil
   else
     ErrorsReporter.report_error("Unknown kind in fix_type_issue", data)
     return nil
   end
 end #}}}
-
-extract_arguments_with_types = lambda { |a, index| #{{{
-  t  =  fix_type_issue(a)
-  return t if t.nil?
-  t[:name] = "arg#{index}"
-  t
-} #}}}
 
 def object_signature_type(object) #{{{
   kind = object[:kind]
@@ -283,6 +279,7 @@ typedef signed char BOOL;
 end
 if new_structs_list.length() > 0
   new_structs_list.each { |struct_hash|
+    next unless (/unsupported\$/ =~ struct_hash).nil?
     struct = source_structs_hash[struct_hash]
     name = struct_name(struct_hash)
     structs_output.puts "typedef struct #{name} {"
@@ -299,7 +296,14 @@ structs_output.close
 producer_signatures_hash = {}
 methods.each { |m|
   method_return_object = fix_type_issue(m["return"])
-  arguments_with_types  = m["args"].map.with_index(&extract_arguments_with_types)
+  arguments_with_types  = m["args"].map.with_index { |a, index|
+    t  =  fix_type_issue(a)
+    next t if t.nil?
+    t[:name] = "arg#{index}"
+    t
+  }
+
+  next if method_return_object.nil? || (arguments_with_types.include? nil)
 
   method_type = m["kind"] == "instance" ? "instanceMethod" : "classMethod"
   method_signature_args = [object_signature_type(method_return_object)]

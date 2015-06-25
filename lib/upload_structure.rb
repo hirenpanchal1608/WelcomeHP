@@ -40,6 +40,6 @@ curl_args = vars.map() { |var|
 server_env = ENV["ROLLOUT_allServicesInOneServer"]
 server = server_env ? server_env : "upload.rollout.io"
 
-curl_cmd = "curl -F structure=@\"#{file}\" 'http://" + server + "/build/structures?" + curl_args + "'"
+curl_cmd = "curl --location --post301 --post302 -F structure=@\"#{file}\" 'http://" + server + "/build/structures?" + curl_args + "'"
 
 system curl_cmd

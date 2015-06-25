@@ -16,9 +16,12 @@ class RemoveRolloutFromXcodeproj
     @project.targets.each do |target|
       if target.respond_to?("product_type") and target.product_type == "com.apple.product-type.application"
         files_references.each do |file_reference|
-          target.frameworks_build_phase.remove_file_reference file_reference
-      
-          target.source_build_phase.remove_file_reference file_reference
+	  begin
+            target.frameworks_build_phase.remove_file_reference file_reference
+            target.source_build_phase.remove_file_reference file_reference
+	  rescue
+	    STDERR.puts "failed to remove #{file_reference} with exception #{$!}"
+	  end
       
           target.build_configurations.each do |build_configuration|
             framework_search_path = build_configuration.build_settings["FRAMEWORK_SEARCH_PATHS"]
