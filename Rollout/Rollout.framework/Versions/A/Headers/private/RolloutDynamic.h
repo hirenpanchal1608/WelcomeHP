@@ -11,14 +11,14 @@
 @protocol RolloutInvocationsListFactory;
 @class RolloutErrors;
 @class RolloutConfiguration;
+@class RolloutInvocation;
 
 @protocol RolloutDynamic
-- (instancetype)initWithInvocationsListFactory:(id <RolloutInvocationsListFactory>)invocationsListFactory configuration:(RolloutConfiguration *)configuration;
+- (instancetype)initWithInvocation:(RolloutInvocation *)invocation;
 @end
 
 @interface RolloutDynamic : NSObject <RolloutDynamic> {
-    id<RolloutInvocationsListFactory> _invocationsListFactory;
-    RolloutConfiguration *_configuration;
+    RolloutInvocation *_invocation;
 }
 @end
 

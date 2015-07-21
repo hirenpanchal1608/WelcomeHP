@@ -7,13 +7,14 @@
 //
 
 #import <Foundation/Foundation.h>
-#import "RolloutInvocationsList.h"
 
 @class RolloutActionProducer;
 @class RolloutErrors;
 @class RolloutTypeWrapperFactory;
 @class RolloutTypeWrapperGeneratorFactory;
 @class RolloutDeviceProperties;
+@class RolloutInvocationsList;
+@class RolloutConditionValuesFactory;
 
 @protocol RolloutInvocationsListFactory
 - (RolloutInvocationsList *)invocationsListFromTweakConfiguration:(NSArray*)tweakConfiguration;

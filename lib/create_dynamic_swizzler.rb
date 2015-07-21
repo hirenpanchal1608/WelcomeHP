@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require "JSON"
+require "json"
 require 'zlib'
 require 'set'
 require_relative "errors_reporter"
@@ -31,22 +31,15 @@ def wrapping(scope) #{{{
   arg_dec  = args.inject("")  { |memo, o|  
     "#{memo}, #{o[:type]} #{o[:name]}"
   }
+  arg_dec_types_only  = args.inject("")  { |memo, o|  
+    "#{memo}, #{o[:type]}"
+  }
 
   t = scope[:type]
-  call_store = "originalFunction(rcv, NSSelectorFromString(methodId.selector)#{arg_names})"
-  set_original_return_value = "#{call_store};"
-  set_original_return_value_if_nil_invocation = "originalFunction(rcv, NSSelectorFromString(methodId.selector)#{arg_list});"
-  set_original_return_value_if_nil_invocation_with_return = "#{set_original_return_value_if_nil_invocation} return;"
-  declare_wrapper_r = "" 
-  return_var = ""
-  return_expression = "return;"
-  sync_declare_r = "" 
-  sync_set_r = "swizzleBlock();"
-  sync_return_r = "return;"
-  async_return_r = "return;"
-  final_return = "swizzleBlock(); return;"
-  replaceReturnValue = ""
-  defaultReturnValue = ""
+  call_original = "originalFunction(rcv, NSSelectorFromString(methodId.selector)#{arg_names})"
+  call_original_and_return = "#{call_original}; return [[RolloutTypeWrapper alloc] initWithVoid];"
+  record_definition = ""
+  final_return = ""
 
   arguments = ""
   args.each { |arg|
@@ -62,104 +55,26 @@ def wrapping(scope) #{{{
   end
 
   if r != "void"
-    return_var = "__rollout_r"
-    set_original_return_value = "inv.originalReturnValue = [[RolloutTypeWrapper alloc] initWith#{r_k}:#{call_store}];"
-    set_original_return_value_if_nil_invocation_with_return = "return #{set_original_return_value_if_nil_invocation}"
-    declare_wrapper_r= "RolloutTypeWrapper *#{return_var};"
-    sync_declare_r = "#{r} $; " + ("ObjCObjectPointer" == r_k || "BlockPointer" == r_k ? "__strong " : "") + "#{r}* $p = &$;"
-    sync_set_r = "*$p = swizzleBlock();"
-    sync_return_r = "return $;"
-    async_return_r = "return inv.defaultReturnValue.#{r_k[0, 1].downcase}#{r_k[1..-1]}Value;"
-    final_return = "return swizzleBlock();"
-    return_expression = "return #{return_var}.#{r_k[0, 1].downcase}#{r_k[1..-1]}Value;";
-    defaultReturnValue = "#{return_var} = [inv defaultReturnValue];"
-    replaceReturnValue = "#{return_var} =   [inv conditionalReturnValue];"
+    call_original_and_return = "return [[RolloutTypeWrapper alloc] initWith#{r_k}:#{call_original}];"
+    final_return = "return result.#{r_k[0, 1].downcase + r_k[1..-1]}Value;"
   end 
   if r_k == "Record"
-    set_original_return_value = "{#{r} record = #{call_store};\n              inv.originalReturnValue = [[RolloutTypeWrapper alloc] initWithRecordPointer:&record ofSize:sizeof(#{r}) shouldBeFreedInDealloc:NO];}"
-    return_expression = "return *(#{r} *)#{return_var}.recordPointer;";
-    async_return_r = "return *(#{r} *)inv.defaultReturnValue.recordPointer;"
+    call_original_and_return = "record = #{call_original};\n        return [[RolloutTypeWrapper alloc] initWithRecordPointer:&record ofSize:sizeof(#{r}) shouldBeFreedInDealloc:NO];"
+    record_definition = "__block #{r} record;"
+    final_return = "return *(#{r} *)result.recordPointer;";
   end
-
-  swizzle_block_content = "\
-        #{declare_wrapper_r}
-        [inv runBefore];
-    
-        inv.originalArguments = originalArguments;
-        #{tweaked_arguments}
-    
-        switch ([inv type]) {
-            case RolloutInvocationTypeDisable:
-                #{defaultReturnValue}
-                break;
-            case RolloutInvocationTypeTryCatch:
-                @try{
-                  #{set_original_return_value}
-                  #{replaceReturnValue}
-                }
-                @catch(id e){
-                    [inv runAfterExceptionCaught];
-                    #{defaultReturnValue}
-                }
-                break;
-            case RolloutInvocationTypeNormal:
-            default:
-                  #{set_original_return_value};
-                  #{replaceReturnValue}
-                break;
-        }
-        #{return_expression}"
 
   return "
 - (id)blockFor_#{producer_signature}_withOriginalImplementation:(IMP)originalImplementation methodId:(RolloutMethodId *)methodId
 {
   return ^#{r}(id rcv#{arg_dec}) {
-    #{r} (*originalFunction)(id rcv, SEL _cmd#{arg_dec}) = (void *) originalImplementation;
-
+    #{r} (*originalFunction)(id, SEL#{arg_dec_types_only}) = (void *) originalImplementation;
     NSArray *originalArguments = @[#{arguments}];
-    NSArray *tweakConfiguration = self->_configuration.configurationsByMethodId[methodId];
-    RolloutInvocationsList *invocationsList = [self->_invocationsListFactory invocationsListFromTweakConfiguration:tweakConfiguration];
-    RolloutInvocation *inv = [invocationsList invocationForArguments:originalArguments];
-    
-    if(!inv) {
-       #{set_original_return_value_if_nil_invocation_with_return}
-    }
+    #{record_definition}
+    RolloutTypeWrapper *result __attribute__((unused)) = [self->_invocation invokeWithMethodId:methodId originalArguments:originalArguments originalMethodWrapper:^RolloutTypeWrapper *(NSArray *arguments) {
+        #{call_original_and_return}
+    }];
 
-    if(inv.forceMainThreadType == RolloutInvocation_ForceMainThreadType_off || [NSThread isMainThread]) {
-#{swizzle_block_content}
-    }
-
-    #{r} (^swizzleBlock)() = ^#{r}() {
-#{swizzle_block_content}
-    };
-
-    switch(inv.forceMainThreadType) {
-        case RolloutInvocation_ForceMainThreadType_sync: {
-            #{sync_declare_r}
-            id exception = nil, __strong *exceptionPointer = &exception;
-
-            dispatch_sync(dispatch_get_main_queue(), ^{
-	        @try {
-                    #{sync_set_r}
-                } @catch(id exception) {
-                    *exceptionPointer = exception;
-                }
-            });
-            if(exception) {
-                @throw exception;
-            }
-            #{sync_return_r}
-        }
-        case RolloutInvocation_ForceMainThreadType_async: {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                swizzleBlock();
-            });
-            #{async_return_r}
-        }
-        case RolloutInvocation_ForceMainThreadType_off:
-        case RolloutInvocation_ForceMainThreadTypesCount:
-            break;
-    }
     #{final_return}
   };
 }

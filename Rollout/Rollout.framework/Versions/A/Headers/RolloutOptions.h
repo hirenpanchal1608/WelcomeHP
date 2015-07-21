@@ -18,7 +18,7 @@ typedef enum {
 @property (nonatomic) BOOL disableSyncLoadingFallback;
 @property (nonatomic) RolloutOptionsVerboseLevel verbose;
 @property (nonatomic, strong) NSArray *silentFiles;
-
+@property (nonatomic) BOOL rolloutDisabled;
 
 @end
 

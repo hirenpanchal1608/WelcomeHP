@@ -31,7 +31,6 @@ _RE(RolloutInvocation_tweakedArgumentsCaughtException)
 _RE(RolloutInvocationsList_initWithConfigurationCaughtException)
 _RE(RolloutInvocationsList_invocationForArgumentsCaughtException)
 
-_RE(RolloutClient_signatureWasNotVerified)
 _RE(RolloutClient_appKeyMismatch)
 _RE(RolloutClient_caughtExceptionInPostRecognition)
 
@@ -54,6 +53,7 @@ _RE(RolloutNetwork_timeout)
 _RE(RolloutNetwork_jsonParsing)
 _RE(RolloutNetwork_emptyResult)
 _RE(RolloutNetwork_exceptionInsideAsyncNetworkRequest)
+_RE(RolloutNetwork_signatureWasNotVerified)
 
 _RE(RolloutMethodSwizzler_swizzlingFailed)
 

@@ -9,21 +9,18 @@
 #import <Rollout/private/RolloutDynamic.h>
 #import <Rollout/private/RolloutInvocation.h>
 #import <Rollout/private/RolloutTypeWrapper.h>
-#import <Rollout/private/RolloutInvocationsListFactory.h>
 #import <Rollout/private/RolloutErrors.h>
 #import <Rollout/private/RolloutMethodId.h>
-#import <Rollout/private/RolloutConfiguration.h>
 #import <objc/objc.h>
 
 
 @implementation RolloutDynamic {
 }
 
-- (instancetype)initWithInvocationsListFactory:(id <RolloutInvocationsListFactory>)invocationsListFactory configuration:(RolloutConfiguration *)configuration
+- (instancetype)initWithInvocation:(RolloutInvocation *)invocation
 {
     if(self = [super init]) {
-        _invocationsListFactory = invocationsListFactory;
-        _configuration = configuration;
+        _invocation = invocation;
     }
     return self;
 }

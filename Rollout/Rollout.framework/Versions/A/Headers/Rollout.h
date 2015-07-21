@@ -1,5 +1,5 @@
 //
-//  Rollout SDK version 0.8.7, Build 89
+//  Rollout SDK version 0.9.0, Build 96
 //
 //  Copyright (c) 2014 Rollout.io. All rights reserved.
 //
@@ -12,6 +12,8 @@
 +(void) setupWithDebug: (BOOL) debug options:(RolloutOptions*)options;
 +(void) setupWithDebug: (BOOL) debug;
 +(void) setup: (NSString*) projectId debug: (BOOL) debug __attribute__ ((deprecated));
++(BOOL) rolloutDisabled;
++ (void)setRolloutDisabled:(BOOL)value;
 
 @end
 
