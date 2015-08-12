@@ -1,5 +1,6 @@
 #!/bin/bash
 
+export PATH=/usr/bin:/bin:"$PATH"
 export LC_ALL=UTF-8
 
 BIN_DIR="$(cd "$(dirname "$0")" && pwd )"

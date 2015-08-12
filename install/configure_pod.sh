@@ -1,5 +1,6 @@
 #!/bin/bash
 
+export PATH=/usr/bin:/bin:"$PATH"
 export LC_ALL=UTF-8
 
 ERROR_canNotAutoDetectXcodeprojFile=(1 "Sorry, couldn't locate the .xcodeproj file automatically. Please specify it with the -p option")

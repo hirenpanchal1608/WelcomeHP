@@ -1,6 +1,8 @@
 #!/bin/bash
 
 export ROLLOUT_TWEAKER="$0"
+export PATH=/usr/bin:/bin:"$PATH"
+
 
 LIB_DIR=$(dirname "$0")
 ROLLOUT_DIR=$(dirname "$LIB_DIR")
