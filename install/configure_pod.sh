@@ -16,7 +16,7 @@ fail() {
 analytic_id=0
 analytics(){
   local query_params="application_key=${app_key}&$1=$2"
-  local analytics_url="http://analytics.rollout.io/analytic/configure_pods"
+  local analytics_url="https://analytics.rollout.io/analytic/configure_pods"
   local curl_command="curl -sf"
   if [ "$analytic_id" == 0 ] ; then
     analytic_id="$($curl_command  "$analytics_url?$query_params" 2>/dev/null || echo 0)"

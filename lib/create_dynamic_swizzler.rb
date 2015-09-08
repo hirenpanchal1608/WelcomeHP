@@ -36,7 +36,7 @@ def wrapping(scope) #{{{
   }
 
   t = scope[:type]
-  call_original = "originalFunction(rcv, NSSelectorFromString(methodId.selector)#{arg_names})"
+  call_original = "originalFunction(rcv, NSSelectorFromString(tweakId.methodId.selector)#{arg_names})"
   call_original_and_return = "#{call_original}; return [[RolloutTypeWrapper alloc] initWithVoid];"
   record_definition = ""
   final_return = ""
@@ -65,13 +65,13 @@ def wrapping(scope) #{{{
   end
 
   return "
-- (id)blockFor_#{producer_signature}_withOriginalImplementation:(IMP)originalImplementation methodId:(RolloutMethodId *)methodId
+- (id)blockFor_#{producer_signature}_withOriginalImplementation:(IMP)originalImplementation tweakId:(RolloutTweakId *)tweakId
 {
   return ^#{r}(id rcv#{arg_dec}) {
     #{r} (*originalFunction)(id, SEL#{arg_dec_types_only}) = (void *) originalImplementation;
     NSArray *originalArguments = @[#{arguments}];
     #{record_definition}
-    RolloutTypeWrapper *result __attribute__((unused)) = [self->_invocation invokeWithMethodId:methodId originalArguments:originalArguments originalMethodWrapper:^RolloutTypeWrapper *(NSArray *arguments) {
+    RolloutTypeWrapper *result __attribute__((unused)) = [self->_invocation invokeWithTweakId:tweakId originalArguments:originalArguments originalMethodWrapper:^RolloutTypeWrapper *(NSArray *arguments) {
         #{call_original_and_return}
     }];
 
@@ -262,6 +262,7 @@ existing_signatures_by_chunk = file_names.map.with_index { |file, index|
 #import <Rollout/private/RolloutInvocationsListFactory.h>
 #import <Rollout/private/RolloutErrors.h>
 #import <Rollout/private/RolloutMethodId.h>
+#import <Rollout/private/RolloutTweakId.h>
 #import <Rollout/private/RolloutConfiguration.h>
 #import <objc/objc.h>
 

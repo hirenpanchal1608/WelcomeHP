@@ -6,16 +6,16 @@
 #import <Foundation/Foundation.h>
 
 @class RolloutTypeWrapper;
-@class RolloutMethodId;
 @class RolloutConfiguration;
 @class RolloutInvocationsListFactory;
+@class RolloutTweakId;
+@class RolloutDeviceProperties;
 
 
 @interface RolloutInvocation : NSObject
-- (instancetype)initWithConfiguration:(RolloutConfiguration *)configuration listsFactory:(RolloutInvocationsListFactory *)listsFactory;
+- (instancetype)initWithConfiguration:(RolloutConfiguration *)configuration listsFactory:(RolloutInvocationsListFactory *)listsFactory tracker:(void (^)(NSDictionary *))tracker deviceProperties:(RolloutDeviceProperties *)deviceProperties;
 
-
-- (RolloutTypeWrapper *)invokeWithMethodId:(RolloutMethodId *)methodId originalArguments:(NSArray*)originalArguments originalMethodWrapper:(RolloutTypeWrapper * (^)(NSArray *))originalMethodWrapper;
+- (RolloutTypeWrapper *)invokeWithTweakId:(RolloutTweakId *)tweakId originalArguments:(NSArray *)originalArguments originalMethodWrapper:(RolloutTypeWrapper *(^)(NSArray *))originalMethodWrapper;
 
 @property (nonatomic) BOOL rolloutDisabled;
 

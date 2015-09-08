@@ -13,7 +13,7 @@
 
 
 @property (atomic) NSDictionary *conf;
-@property (atomic, readonly) NSDictionary *configurationsByMethodId;
+@property (atomic, readonly) NSDictionary *configurationsByTweakId;
 
 
 @end

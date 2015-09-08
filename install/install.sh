@@ -52,6 +52,9 @@ app_key=$2
     `seq -f '"Rollout-ios-SDK/auto_generated_code/RolloutDynamic_%02g.m",' 1 20`
     "Rollout-ios-SDK/Rollout/Rollout.framework"
   ],
+  "weak_system_frameworks": [
+    "System/Library/Frameworks/JavaScriptCore.framework"
+  ],
   `[ -z "$tweaker_before_linking" ] || echo "\"tweaker_phase_before_linking\": 1,"`
   "sdk_subdir": "Rollout-ios-SDK"
 }
