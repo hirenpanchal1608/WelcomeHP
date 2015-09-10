@@ -11,7 +11,7 @@ class RemoveRolloutFromXcodeproj
   def remove_rollout_from_xcodeproj
     rollout_group = @project.objects.find { |o| o.isa == "PBXGroup" && (o.path == "Rollout" || o.name == "Rollout") }
     files_references = rollout_group ? rollout_group.children.select{|c| c.is_a? Xcodeproj::Project::PBXFileReference} : []
-    titles_of_phases_to_remove = ["Rollout.io post-build", "Rollout Code analyzer"]
+    titles_of_phases_to_remove = ["Rollout.io post-build", "Rollout.io pre-build", "Rollout Code analyzer"]
     
     @project.targets.each do |target|
       if target.respond_to?("product_type") and target.product_type == "com.apple.product-type.application"

@@ -223,20 +223,11 @@ export ROLLOUT_shortVersion=`get_info_plist_value CFBundleShortVersionString`
 export ROLLOUT_appKey=$app_key
 
 current_sdk_version=`(. "$LIB_DIR"/versions; echo $lib)`
-cache_sdk_version="$CACHE_DIR"/sdk_version
 preprocessor_debug=""; [ -z "$GCC_PREPROCESSOR_DEFINITIONS" ] || preprocessor_debug=`(eval typeset $GCC_PREPROCESSOR_DEFINITIONS; echo ${DEBUG+1})`
 bundle_version=`get_info_plist_value CFBundleVersion`
 rollout_build=`(. "$LIB_DIR"/versions; echo $build)`
 structure_version=`(. "$LIB_DIR"/versions; echo $structure)`
 
-sdk_version_changed=false
-[ -d "$CACHE_DIR" -a -r "$cache_sdk_version" ] && [ "`cat "$cache_sdk_version"`" == "$current_sdk_version" ] || {
-  echo "Rollout: sdk version changed, cleaning cache..."
-  clean_cache
-  sdk_version_changed=true
-}
-mkdir -p "$CACHE_DIR"
-echo $current_sdk_version > "$cache_sdk_version"
 
 echo "Rollout: going to generate structure and code"
 
@@ -268,7 +259,6 @@ else
   handle_error ERROR_lipoInfoFailed
 fi
 
-  
 for dsym_file in $dsyms_dir/*; do
   arch=${dsym_file##*/}
   arch_json=$temp_dir/arch_json.$arch
@@ -366,7 +356,7 @@ if [ ${#changed_dynamics[*]} -gt 0 ]; then #{{{
       "$linker_cmd" "${linker_args[@]}"
       end_measurement linking_$arch
       declare -i size_after=`stat -f\%z "$linker_out_file"`
-      [ $size_before -lt $size_after ] || $sdk_version_changed || handle_error ERROR_expectedLargerBinaryAfterRelinking
+      [ $size_before -lt $size_after ] || handle_error ERROR_expectedLargerBinaryAfterRelinking
     done
     
     if [ `ls -1 $dsyms_dir | wc -l` == 1 ]; then
@@ -380,7 +370,7 @@ if [ ${#changed_dynamics[*]} -gt 0 ]; then #{{{
       declare -i size_before=`stat -f\%z "$lipo_out_file"`
       "$lipo_cmd" "${lipo_args[@]}"
       declare -i size_after=`stat -f\%z "$lipo_out_file"`
-      [ $size_before -lt $size_after ] || $sdk_version_changed || handle_error ERROR_expectedLargerBinaryAfterRerunningLipo
+      [ $size_before -lt $size_after ] || handle_error ERROR_expectedLargerBinaryAfterRerunningLipo
     
       dsym_source_file="$lipo_out_file"
     fi

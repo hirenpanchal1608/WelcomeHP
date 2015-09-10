@@ -1,0 +1,18 @@
+#!/bin/bash
+
+echo "Rollout pre-build phase started"
+
+LIB_DIR=$(dirname "$0")
+ROLLOUT_DIR=$(dirname "$LIB_DIR")
+CACHE_DIR="${ROLLOUT_DIR}/.cache"
+
+current_sdk_version=`(. "$LIB_DIR"/versions; echo $lib)`
+cache_sdk_version="$CACHE_DIR"/sdk_version
+
+[ -d "$CACHE_DIR" -a -r "$cache_sdk_version" ] && [ "`cat "$cache_sdk_version"`" == "$current_sdk_version" ] || {
+  echo "Rollout: sdk version changed, cleaning cache..."
+  "$LIB_DIR"/tweaker -c
+}
+mkdir -p "$CACHE_DIR"
+echo $current_sdk_version > "$cache_sdk_version"
+

@@ -34,7 +34,10 @@ xcodeproj_configuration=`. '#{base_dir}/lib/versions' ; /bin/echo -n $xcodeproj_
 
 tweaker_d_flag = tweaker_phase_before_linking ? "-d" : ""
 script_content = "ROLLOUT_lastXcodeprojConfiguration=#{xcodeproj_configuration} \"\${SRCROOT}/#{sdk_subdir}/lib/tweaker\" #{tweaker_d_flag} -k #{app_key}"
-CreateScript.new(project).create_script("Rollout.io post-build", script_content, tweaker_phase_before_linking)
+CreateScript.new(project).create_script("Rollout.io post-build", script_content, (tweaker_phase_before_linking ? "before_linking" : "end"))
+
+script_content = "ROLLOUT_lastXcodeprojConfiguration=#{xcodeproj_configuration} \"\${SRCROOT}/#{sdk_subdir}/lib/pre-build_xcode_phase\""
+CreateScript.new(project).create_script("Rollout.io pre-build", script_content, "beginning")
 
 OverrideClang.new(project).install("\${SRCROOT}/#{sdk_subdir}/lib")
 
