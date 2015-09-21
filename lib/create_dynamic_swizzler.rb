@@ -200,7 +200,13 @@ if new_structs_list.length() > 0
     structs_output.puts "typedef struct #{name} {"
     struct["children"].each { |c|
       next if c.empty?
-      type = c["kind"] == "Record" ? struct_name(c["record_data_ref"]) : fix_type_issue(c)[:type] 
+      if(c["kind"] == "Record")
+        type = struct_name(c["record_data_ref"])
+      else
+        c_with_fixed_type = fix_type_issue(c)
+        next if c_with_fixed_type.nil?
+        type = c_with_fixed_type[:type] 
+      end
       structs_output.puts "  #{type} #{c["symbol"]};"
     }
     structs_output.puts "} #{name};"
